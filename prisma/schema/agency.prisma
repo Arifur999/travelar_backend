@@ -1,0 +1,57 @@
+/// The tenant. Every business row in this database carries an agencyId and
+/// every query filters on it — see checkTenant / the service layer.
+model Agency {
+  id                  String       @id @default(uuid(7))
+  name                String
+  email               String?
+  phone               String?
+  address             String?      @db.Text
+  logo                String?
+
+  status              AgencyStatus @default(TRIAL)
+  /// A new agency gets 7 days with every feature unlocked.
+  trialEndsAt         DateTime?
+  subscriptionEndsAt  DateTime?
+
+  planId              String?
+  plan                Plan?        @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  isDeleted           Boolean      @default(false)
+  deletedAt           DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  users               User[]
+  customers           Customer[]
+  tickets             Ticket[]
+  visaCases           VisaCase[]
+  visaAgents          VisaAgent[]
+  subscriptionOrders  SubscriptionOrder[]
+  payments            Payment[]
+  hajjPackages        HajjPackage[]
+
+  @@index([planId])
+  @@index([status])
+  @@map("agencies")
+}
+
+/// A subscription tier. `features` is the whitelist checkFeatureAccess() reads.
+model Plan {
+  id           String        @id @default(uuid(7))
+  name         String        @unique
+  description  String?       @db.Text
+  price        Decimal       @db.Decimal(12, 2)
+  durationDays Int           @default(30)
+  features     PlanFeature[]
+  isActive     Boolean       @default(true)
+
+  isDeleted    Boolean       @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  agencies           Agency[]
+  subscriptionOrders SubscriptionOrder[]
+
+  @@map("plans")
+}

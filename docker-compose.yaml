@@ -1,0 +1,23 @@
+# Local development database. The apps themselves run on the host with
+# `pnpm dev` — only Postgres needs a container.
+services:
+  travelar-db:
+    container_name: travelar-db
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: travelar
+    ports:
+      - "5433:5432"
+    volumes:
+      - travelar-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  travelar-db-data:

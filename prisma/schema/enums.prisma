@@ -1,0 +1,108 @@
+enum Role {
+  SUPER_ADMIN
+  AGENCY_ADMIN
+  AGENCY_STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
+/// Drives the read-only gate: a TRIAL agency past trialEndsAt, or an EXPIRED /
+/// SUSPENDED one, may still GET but is blocked from any write.
+enum AgencyStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
+/// What a plan unlocks. Checked by checkFeatureAccess(); every feature is
+/// unlocked while an agency is still inside its trial window.
+enum PlanFeature {
+  TICKETING
+  VISA
+  HAJJ_UMRAH
+  REPORTS
+}
+
+/// One-way state machine, enforced in the service layer:
+/// ISSUED -> REISSUED | REFUNDED | VOID ; REISSUED -> REFUNDED | VOID.
+/// REFUNDED and VOID are final.
+enum TicketStatus {
+  ISSUED
+  REISSUED
+  REFUNDED
+  VOID
+}
+
+/// One-way: SUBMITTED -> PROCESSING -> APPROVED | REJECTED ; APPROVED -> DELIVERED.
+/// REJECTED and DELIVERED are final.
+enum VisaStatus {
+  SUBMITTED
+  PROCESSING
+  APPROVED
+  REJECTED
+  DELIVERED
+}
+
+enum HajjBookingStatus {
+  RESERVED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum HajjPackageType {
+  HAJJ
+  UMRAH
+}
+
+enum DocumentStatus {
+  PENDING
+  RECEIVED
+  VERIFIED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  MOBILE_BANKING
+  CHEQUE
+  OTHER
+}
+
+enum SubscriptionOrderStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum HajjTier {
+  ECONOMY
+  PREMIUM
+  VIP
+}
+
+enum HajjMealPlan {
+  NONE
+  BREAKFAST
+  FULL_BOARD
+}
+
+enum HajjBatchStatus {
+  OPEN
+  FULL
+  DEPARTED
+  COMPLETED
+  CANCELLED
+}
+
+enum HajjHotelType {
+  MAKKAH
+  MADINAH
+}

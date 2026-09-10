@@ -1,0 +1,57 @@
+/// One row per checkout/retry attempt. Never mutated into a "new" attempt —
+/// retrying always creates a fresh row, so the gateway trail stays auditable.
+model SubscriptionOrder {
+  id                   String                  @id @default(uuid(7))
+
+  agencyId             String
+  agency               Agency                  @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  planId               String
+  plan                 Plan                    @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  /// Snapshotted from the plan's price at checkout — a later price change must
+  /// not retroactively alter what was charged.
+  amount               Decimal                 @db.Decimal(12, 2)
+
+  /// Our own id, sent to SSLCommerz as tran_id. Format ORDER-<agencyId>-<ts>.
+  transactionId        String                  @unique
+  sslcommerzSessionKey String?
+  /// Set only once the IPN's val_id has been independently confirmed against
+  /// the Order Validation API — never straight from the callback payload.
+  sslcommerzValId      String?
+
+  status               SubscriptionOrderStatus @default(PENDING)
+  paymentMethod        String?
+  /// Full IPN payload + validation response, kept for dispute/debugging.
+  rawGatewayResponse   Json?
+
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@index([agencyId])
+  @@index([planId])
+  @@index([status])
+  @@map("subscription_orders")
+}
+
+/// Manual / admin-recorded subscription payments (the super admin's
+/// "Record Payment" flow), read alongside SubscriptionOrder for a unified view.
+model Payment {
+  id            String        @id @default(uuid(7))
+
+  agencyId      String
+  agency        Agency        @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod @default(BANK_TRANSFER)
+  reference     String?
+  note          String?       @db.Text
+  paidAt        DateTime      @default(now())
+  recordedById  String?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([agencyId])
+  @@map("subscription_payments")
+}

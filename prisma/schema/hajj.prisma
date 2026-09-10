@@ -1,0 +1,211 @@
+/// The sellable package master list, e.g. "Umrah Economy — Ramadan 2027".
+model HajjPackage {
+  id             String          @id @default(uuid(7))
+
+  agencyId       String
+  agency         Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  name           String
+  /// Drives which document checklist preset a booking is seeded with.
+  type           HajjPackageType
+  tier           HajjTier        @default(ECONOMY)
+  price          Decimal         @db.Decimal(12, 2)
+  durationDays   Int?
+
+  makkahHotel    String?
+  makkahDistance String?
+  madinahHotel   String?
+  madinahDistance String?
+  muallim        String?
+  mealPlan       HajjMealPlan    @default(NONE)
+  description    String?         @db.Text
+
+  /// Inactive packages stay visible on existing bookings but are hidden from
+  /// new-booking pickers.
+  isActive       Boolean         @default(true)
+
+  isDeleted      Boolean         @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  batches        HajjBatch[]
+  bookings       HajjBooking[]
+
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@map("hajj_packages")
+}
+
+/// A specific departure/group tied to one package. bookedSeats /
+/// availableSeats are NOT stored — they are counted from non-cancelled
+/// bookings at read time so a cancellation frees a seat immediately.
+model HajjBatch {
+  id            String          @id @default(uuid(7))
+
+  agencyId      String
+  packageId     String
+  hajjPackage   HajjPackage     @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  name          String
+  departureDate DateTime
+  returnDate    DateTime?
+  seatCapacity  Int
+  status        HajjBatchStatus @default(OPEN)
+
+  isDeleted     Boolean         @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  rooms         HajjRoom[]
+  bookings      HajjBooking[]
+
+  @@index([agencyId])
+  @@index([packageId])
+  @@index([agencyId, isDeleted])
+  @@map("hajj_batches")
+}
+
+/// A hotel room available for pilgrim assignment, scoped to one batch.
+/// occupancy / availableSlots are computed on read.
+model HajjRoom {
+  id         String        @id @default(uuid(7))
+
+  agencyId   String
+  batchId    String
+  batch      HajjBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  hotelType  HajjHotelType
+  roomNumber String
+  capacity   Int
+
+  isDeleted  Boolean       @default(false)
+  deletedAt  DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  makkahOccupants  HajjBooking[] @relation("MakkahRoom")
+  madinahOccupants HajjBooking[] @relation("MadinahRoom")
+
+  @@index([agencyId])
+  @@index([batchId])
+  @@map("hajj_rooms")
+}
+
+/// One row per pilgrim — the central record of the module.
+model HajjBooking {
+  id             String            @id @default(uuid(7))
+
+  agencyId       String
+  customerId     String
+  customer       Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  packageId      String
+  hajjPackage    HajjPackage       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  batchId        String
+  batch          HajjBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  pilgrimName    String
+  passportNumber String?
+  munajjimNumber String?
+
+  /// Snapshotted from the package price at booking time — defaults to the
+  /// package's current price but may be overridden, and a later package price
+  /// change must never move an existing booking's balance.
+  packagePrice   Decimal           @db.Decimal(12, 2)
+
+  status         HajjBookingStatus @default(RESERVED)
+
+  makkahRoomId   String?
+  makkahRoom     HajjRoom?         @relation("MakkahRoom", fields: [makkahRoomId], references: [id], onDelete: SetNull)
+  madinahRoomId  String?
+  madinahRoom    HajjRoom?         @relation("MadinahRoom", fields: [madinahRoomId], references: [id], onDelete: SetNull)
+
+  createdById    String?
+
+  isDeleted      Boolean           @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  payments       HajjPayment[]
+  documents      HajjDocument[]
+  statusHistory  HajjStatusHistory[]
+
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@index([batchId])
+  @@index([packageId])
+  @@index([customerId])
+  @@index([makkahRoomId])
+  @@index([madinahRoomId])
+  @@map("hajj_bookings")
+}
+
+model HajjPayment {
+  id             String        @id @default(uuid(7))
+
+  agencyId       String
+  bookingId      String
+  booking        HajjBooking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  amount         Decimal       @db.Decimal(12, 2)
+  method         PaymentMethod @default(CASH)
+  transactionRef String?
+  note           String?       @db.Text
+  paidAt         DateTime      @default(now())
+
+  recordedById   String?
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([bookingId])
+  @@index([agencyId])
+  @@map("hajj_payments")
+}
+
+/// Seeded from the package-type preset at booking creation, all PENDING.
+model HajjDocument {
+  id           String         @id @default(uuid(7))
+
+  agencyId     String
+  bookingId    String
+  booking      HajjBooking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  title        String
+  status       DocumentStatus @default(PENDING)
+  fileUrl      String?
+  originalName String?
+  mimeType     String?
+  sizeBytes    Int?
+  receivedAt   DateTime?
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([bookingId])
+  @@index([agencyId])
+  @@map("hajj_documents")
+}
+
+model HajjStatusHistory {
+  id          String             @id @default(uuid(7))
+
+  agencyId    String
+  bookingId   String
+  booking     HajjBooking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  fromStatus  HajjBookingStatus?
+  toStatus    HajjBookingStatus
+  note        String?            @db.Text
+
+  changedById String?
+  changedAt   DateTime           @default(now())
+
+  @@index([bookingId])
+  @@index([agencyId])
+  @@map("hajj_status_history")
+}
