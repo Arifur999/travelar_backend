@@ -50,7 +50,9 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
       prisma.ticket.groupBy({
         by: ["customerId"],
         where: { agencyId, isDeleted: false, customerId: { in: customerIds } },
-        _sum: { fare: true },
+        // What the customer is actually charged: the fare, plus anything billed
+        // for a date change, less anything refunded back to them.
+        _sum: { fare: true, dateChangeFee: true, refundAmount: true },
       }),
       prisma.visaCase.groupBy({
         by: ["customerId"],
@@ -121,7 +123,12 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
     return totals;
   };
 
-  const ticketSale = new Map(tickets.map((t) => [t.customerId, toNumber(t._sum.fare)]));
+  const ticketSale = new Map(
+    tickets.map((t) => [
+      t.customerId,
+      toNumber(t._sum.fare) + toNumber(t._sum.dateChangeFee) - toNumber(t._sum.refundAmount),
+    ]),
+  );
   const visaSale = new Map(
     visaCases.map((v) => [v.customerId, toNumber(v._sum.serviceFee) + toNumber(v._sum.embassyFee)]),
   );
@@ -259,7 +266,10 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
   const [tickets, dueReceipts] = await Promise.all([
     prisma.ticket.findMany({
       where: { agencyId, customerId: id, isDeleted: false },
-      select: { id: true, pnr: true, fare: true, issueDate: true, createdAt: true },
+      select: {
+        id: true, pnr: true, fare: true, dateChangeFee: true, refundAmount: true,
+        issueDate: true, createdAt: true,
+      },
     }),
     prisma.dueReceived.findMany({
       where: { agencyId, customerId: id },
@@ -293,7 +303,8 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
       date: ticket.issueDate ?? ticket.createdAt,
       type: "ticket",
       description: `Ticket booking — PNR ${ticket.pnr}`,
-      debit: toNumber(ticket.fare),
+      debit:
+        toNumber(ticket.fare) + toNumber(ticket.dateChangeFee) - toNumber(ticket.refundAmount),
       credit: 0,
     });
   }

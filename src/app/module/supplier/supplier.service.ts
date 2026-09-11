@@ -44,7 +44,9 @@ const attachLedgerTotals = async <T extends { id: string; openingPayable: Prisma
     prisma.ticket.groupBy({
       by: ["supplierId"],
       where: { agencyId, isDeleted: false, supplierId: { in: supplierIds } },
-      _sum: { cost: true },
+      // A date change is additive on both sides, so what the supplier charged
+      // for it is part of the purchase, not a separate thing.
+      _sum: { cost: true, dateChangeCost: true },
     }),
     prisma.supplierTransaction.groupBy({
       by: ["supplierId"],
@@ -53,7 +55,9 @@ const attachLedgerTotals = async <T extends { id: string; openingPayable: Prisma
     }),
   ]);
 
-  const purchaseMap = new Map(purchaseAgg.map((p) => [p.supplierId, toNumber(p._sum.cost)]));
+  const purchaseMap = new Map(
+    purchaseAgg.map((p) => [p.supplierId, toNumber(p._sum.cost) + toNumber(p._sum.dateChangeCost)]),
+  );
   const paymentMap = new Map(paymentAgg.map((p) => [p.supplierId, toNumber(p._sum.amount)]));
 
   return suppliers.map((supplier) => {
@@ -167,7 +171,10 @@ const getSupplierLedger = async (agencyId: string, id: string) => {
   const [tickets, payments] = await Promise.all([
     prisma.ticket.findMany({
       where: { agencyId, supplierId: id, isDeleted: false },
-      select: { id: true, pnr: true, cost: true, issueDate: true, createdAt: true, passengerName: true },
+      select: {
+        id: true, pnr: true, cost: true, dateChangeCost: true,
+        issueDate: true, createdAt: true, passengerName: true,
+      },
     }),
     prisma.supplierTransaction.findMany({
       where: { agencyId, supplierId: id },
@@ -191,7 +198,7 @@ const getSupplierLedger = async (agencyId: string, id: string) => {
       date: ticket.issueDate ?? ticket.createdAt,
       type: "purchase",
       description: `Ticket purchase — PNR ${ticket.pnr} (${ticket.passengerName})`,
-      debit: toNumber(ticket.cost),
+      debit: toNumber(ticket.cost) + toNumber(ticket.dateChangeCost),
       credit: 0,
     });
   }
