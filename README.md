@@ -13,7 +13,7 @@ cp .env.example .env          # then fill in the values
 docker compose up -d          # Postgres on host port 5433
 pnpm generate                 # prisma generate + ESM import fixup
 pnpm migrate --name init      # apply migrations
-pnpm dev                      # API on http://localhost:5000
+pnpm dev                      # API on http://localhost:5050
 ```
 
 > Host port **5433**, not 5432 — a native Postgres install commonly holds 5432

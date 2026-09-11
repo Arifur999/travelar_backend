@@ -1,3 +1,4 @@
+import { APIError } from "better-auth/api";
 import { NextFunction, Request, Response } from "express";
 import status from "http-status";
 import { z } from "zod";
@@ -48,6 +49,14 @@ export const globalErrorHandler = async (err: any, req: Request, res: Response, 
     applySimplified(handlerPrismaClientRustPanicError(), err.stack);
   } else if (err instanceof z.ZodError) {
     applySimplified(handleZodError(err), err.stack);
+  } else if (err instanceof APIError) {
+    // better-auth signals failures with its own error type carrying the right
+    // HTTP status. Without this branch a wrong password fell through to the
+    // generic Error case and answered 500 instead of 401.
+    statusCode = err.statusCode ?? status.UNAUTHORIZED;
+    message = err.body?.message ?? err.message;
+    stack = err.stack;
+    errorSource = [{ path: "", message }];
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;
