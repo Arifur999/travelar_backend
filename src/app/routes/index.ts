@@ -5,6 +5,7 @@ import { BalanceTransferRoutes } from "../module/balanceTransfer/balanceTransfer
 import { CapitalRoutes } from "../module/capital/capital.route.js";
 import { CashAccountRoutes } from "../module/cashAccount/cashAccount.route.js";
 import { CustomerRoutes } from "../module/customer/customer.route.js";
+import { DashboardRoutes } from "../module/dashboard/dashboard.route.js";
 import { DueReceivedRoutes } from "../module/dueReceived/dueReceived.route.js";
 import { EmployeeRoutes } from "../module/employee/employee.route.js";
 import { ExpenseRoutes } from "../module/expense/expense.route.js";
@@ -32,5 +33,6 @@ router.use("/capital", CapitalRoutes);
 router.use("/visa", VisaRoutes);
 router.use("/hajj", HajjRoutes);
 router.use("/employees", EmployeeRoutes);
+router.use("/dashboard", DashboardRoutes);
 
 export const indexRoute = router;
