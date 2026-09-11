@@ -11,6 +11,10 @@ model Customer {
   address       String?    @db.Text
   note          String?    @db.Text
 
+  /// Balance carried in when the customer was first recorded. Due is derived as
+  /// openingDue + sales - collections - discounts.
+  openingDue    Decimal    @db.Decimal(14, 2) @default(0)
+
   isDeleted     Boolean    @default(false)
   deletedAt     DateTime?
   createdAt     DateTime   @default(now())
