@@ -153,6 +153,11 @@ model HajjPayment {
 
   amount         Decimal       @db.Decimal(12, 2)
   method         PaymentMethod @default(CASH)
+
+  /// Money collected on a pilgrim booking lands in a real account.
+  cashAccountId  String
+  cashAccount    CashAccount   @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
   transactionRef String?
   note           String?       @db.Text
   paidAt         DateTime      @default(now())
@@ -164,6 +169,7 @@ model HajjPayment {
 
   @@index([bookingId])
   @@index([agencyId])
+  @@index([cashAccountId])
   @@map("hajj_payments")
 }
 

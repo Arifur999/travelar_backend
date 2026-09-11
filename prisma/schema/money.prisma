@@ -36,6 +36,8 @@ model CashAccount {
   dueReceivedFirst  DueReceived[]         @relation("DueAccount1")
   dueReceivedSecond DueReceived[]         @relation("DueAccount2")
   ticketPayments    TicketPayment[]
+  visaPayments      VisaPayment[]
+  hajjPayments      HajjPayment[]
 
   /// A soft-deleted account keeps its name reserved on purpose — two accounts
   /// with the same name, one deleted, would make an audit trail ambiguous.

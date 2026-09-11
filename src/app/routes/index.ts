@@ -11,6 +11,7 @@ import { RouteMasterRoutes } from "../module/routeMaster/routeMaster.route.js";
 import { SupplierRoutes } from "../module/supplier/supplier.route.js";
 import { SupplierTransactionRoutes } from "../module/supplierTransaction/supplierTransaction.route.js";
 import { TicketRoutes } from "../module/ticket/ticket.route.js";
+import { VisaRoutes } from "../module/visa/visa.route.js";
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use("/routes-master", RouteMasterRoutes);
 router.use("/ticketing", TicketRoutes);
 router.use("/expenses", ExpenseRoutes);
 router.use("/capital", CapitalRoutes);
+router.use("/visa", VisaRoutes);
 
 export const indexRoute = router;
