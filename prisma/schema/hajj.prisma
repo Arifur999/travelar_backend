@@ -24,6 +24,8 @@ model HajjPackage {
   /// new-booking pickers.
   isActive       Boolean         @default(true)
 
+  createdById    String?
+
   isDeleted      Boolean         @default(false)
   deletedAt      DateTime?
   createdAt      DateTime        @default(now())
@@ -52,6 +54,8 @@ model HajjBatch {
   returnDate    DateTime?
   seatCapacity  Int
   status        HajjBatchStatus @default(OPEN)
+
+  createdById   String?
 
   isDeleted     Boolean         @default(false)
   deletedAt     DateTime?
