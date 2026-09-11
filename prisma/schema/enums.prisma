@@ -25,7 +25,9 @@ enum PlanFeature {
   TICKETING
   VISA
   HAJJ_UMRAH
+  EXPENSE
   REPORTS
+  CRM
 }
 
 /// One-way state machine, enforced in the service layer:
@@ -105,4 +107,87 @@ enum HajjBatchStatus {
 enum HajjHotelType {
   MAKKAH
   MADINAH
+}
+
+/// Which side of the ledger a posting sits on. Every money movement in the
+/// system is exactly one AccountPosting with one of these directions.
+enum PostingDirection {
+  IN
+  OUT
+}
+
+/// What caused a posting. Mirrors the columns of the source spreadsheet's
+/// Balance Dashboard, so a per-source sum reproduces that sheet exactly.
+enum PostingSource {
+  OPENING
+  INVESTMENT
+  INVESTMENT_WITHDRAWAL
+  PROFIT_WITHDRAWAL
+  SUPPLIER_PAYMENT
+  SALES_PAYMENT
+  DATE_CHANGE_FEE
+  DUE_RECEIVED
+  EXPENSE
+  EMPLOYEE_PAYOUT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+}
+
+enum CashAccountCategory {
+  OWNER_FUNDS
+  LOANS
+  SALES_BUYING
+  OTHERS
+}
+
+/// Owner capital moving in or out of the business.
+enum CapitalFlowType {
+  INVEST
+  WITHDRAW
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+/// Only payouts — there is no advance or deduction type.
+enum EmployeePayoutType {
+  SALARY
+  BONUS
+}
+
+enum AnnouncementType {
+  INFO
+  FEATURE
+  MAINTENANCE
+  WARNING
+}
+
+enum SupportCategory {
+  BILLING
+  TECHNICAL
+  FEATURE_REQUEST
+  OTHER
+}
+
+enum SupportPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum SupportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum PlanHistoryAction {
+  ASSIGNED
+  UPGRADED
+  DOWNGRADED
+  TRIAL_EXTENDED
 }

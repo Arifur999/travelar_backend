@@ -28,6 +28,12 @@ model User {
   visaCasesCreated     VisaCase[]            @relation("VisaCaseCreatedBy")
   visaStatusChanges    VisaStatusHistory[]
 
+  announcementsCreated  Announcement[]     @relation("AnnouncementAuthor")
+  announcementReads     AnnouncementRead[]
+  supportTicketsCreated SupportTicket[]    @relation("SupportTicketAuthor")
+  supportMessages       SupportMessage[]
+  adminActivityLogs     AdminActivityLog[]
+
   @@index([agencyId])
   @@index([email])
   @@map("users")

@@ -19,9 +19,52 @@ model Customer {
   tickets       Ticket[]
   visaCases     VisaCase[]
   hajjBookings  HajjBooking[]
+  dueReceived   DueReceived[]
 
   @@index([agencyId])
   @@index([agencyId, isDeleted])
   @@index([phone])
   @@map("customers")
+}
+
+/// A payment collected against a customer's outstanding balance, as opposed to
+/// against one specific sale.
+///
+/// Split tender is first-class: one receipt can land in two accounts (part cash,
+/// part bKash). `discount` is a write-off — it reduces what the customer owes
+/// without any money arriving, so it posts to no account.
+model DueReceived {
+  id                String      @id @default(uuid(7))
+
+  agencyId          String
+  agency            Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  customerId        String
+  customer          Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  date              DateTime    @default(now())
+
+  cashAccount1Id    String
+  cashAccount1      CashAccount @relation("DueAccount1", fields: [cashAccount1Id], references: [id], onDelete: Restrict)
+  amount1           Decimal     @db.Decimal(14, 2)
+
+  cashAccount2Id    String?
+  cashAccount2      CashAccount? @relation("DueAccount2", fields: [cashAccount2Id], references: [id], onDelete: Restrict)
+  amount2           Decimal     @db.Decimal(14, 2) @default(0)
+
+  discount          Decimal     @db.Decimal(14, 2) @default(0)
+  discountCategory  String?
+
+  paymentReceiverId String?
+  notes             String?     @db.Text
+
+  createdById       String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([agencyId])
+  @@index([customerId])
+  @@index([cashAccount1Id])
+  @@index([agencyId, date])
+  @@map("due_received")
 }

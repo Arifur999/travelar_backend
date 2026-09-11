@@ -30,6 +30,25 @@ model Agency {
   payments            Payment[]
   hajjPackages        HajjPackage[]
 
+  cashAccounts         CashAccount[]
+  accountPostings      AccountPosting[]
+  balanceTransfers     BalanceTransfer[]
+  capitalFlows         CapitalFlow[]
+  profitWithdrawals    ProfitWithdrawal[]
+  suppliers            Supplier[]
+  supplierTransactions SupplierTransaction[]
+  expenseCategories    ExpenseCategory[]
+  expenses             Expense[]
+  dueReceived          DueReceived[]
+  airlineMasters       AirlineMaster[]
+  routeMasters         RouteMaster[]
+  monthlyGoals         MonthlyGoal[]
+  employees            Employee[]
+  employeeAttendance   EmployeeAttendance[]
+  employeeTransactions EmployeeTransaction[]
+  supportTickets       SupportTicket[]
+  planHistories        PlanHistory[]
+
   @@index([planId])
   @@index([status])
   @@map("agencies")
@@ -52,6 +71,7 @@ model Plan {
 
   agencies           Agency[]
   subscriptionOrders SubscriptionOrder[]
+  planHistories      PlanHistory[]
 
   @@map("plans")
 }

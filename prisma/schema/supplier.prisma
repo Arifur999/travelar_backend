@@ -1,0 +1,67 @@
+/// A vendor the agency buys tickets and services from.
+///
+/// Note the vocabulary clash with the source spreadsheet, where these are
+/// called "Agency Name": in this system `Agency` is the tenant and `Supplier`
+/// is who that tenant buys from.
+model Supplier {
+  id             String                @id @default(uuid(7))
+
+  agencyId       String
+  agency         Agency                @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  name           String
+  contactName    String?
+  phone          String?
+  address        String?               @db.Text
+
+  /// Balance carried in when the supplier was first recorded. Payable is
+  /// derived as `openingPayable + Σ purchases − Σ payments`; unlike the
+  /// previous implementation, a purchase actually accrues against it.
+  openingPayable Decimal               @db.Decimal(14, 2) @default(0)
+
+  createdById    String?
+
+  isDeleted      Boolean               @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  transactions   SupplierTransaction[]
+  tickets        Ticket[]
+
+  @@unique([agencyId, name])
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@map("suppliers")
+}
+
+/// A payment made TO a supplier. Always money out; there is no type discriminator
+/// because a purchase accrues payable through the Ticket, not through this table.
+model SupplierTransaction {
+  id            String      @id @default(uuid(7))
+
+  agencyId      String
+  agency        Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  supplierId    String
+  supplier      Supplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  date          DateTime    @default(now())
+
+  cashAccountId String
+  cashAccount   CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  amount        Decimal     @db.Decimal(14, 2)
+  note          String?     @db.Text
+
+  paidById      String?
+  createdById   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([agencyId])
+  @@index([supplierId])
+  @@index([cashAccountId])
+  @@index([agencyId, date])
+  @@map("supplier_transactions")
+}

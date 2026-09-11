@@ -9,10 +9,19 @@ model Ticket {
 
   passengerName String
   pnr           String
-  airline       String
-  supplier      String?
-  routeFrom     String?
-  routeTo       String?
+
+  /// Real foreign keys, not the free-text strings the previous implementation
+  /// grouped analytics by — "Biman" and "biman " were two different rows there,
+  /// and a ticket cost could never accrue against the supplier it was bought from.
+  airlineId     String?
+  airline       AirlineMaster? @relation(fields: [airlineId], references: [id], onDelete: SetNull)
+
+  supplierId    String?
+  supplier      Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  routeId       String?
+  route         RouteMaster?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
+
   travelDate    DateTime?
   issueDate     DateTime     @default(now())
 
@@ -24,6 +33,14 @@ model Ticket {
 
   status        TicketStatus @default(ISSUED)
   refundAmount  Decimal?     @db.Decimal(12, 2)
+
+  /// Flight date change, additive on top of the original sale — the sheet tracks
+  /// both sides. The previous implementation had no concept of this at all, and
+  /// its reissue path overwrote the fare while leaving cost stale, silently
+  /// inflating stored profit.
+  dateChangedAt    DateTime?
+  dateChangeCost   Decimal?  @db.Decimal(12, 2)
+  dateChangeFee    Decimal?  @db.Decimal(12, 2)
 
   createdById   String?
   createdBy     User?        @relation("TicketCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -40,7 +57,11 @@ model Ticket {
   @@index([agencyId])
   @@index([agencyId, isDeleted])
   @@index([agencyId, status])
+  @@index([agencyId, isDeleted, createdAt])
   @@index([customerId])
+  @@index([supplierId])
+  @@index([airlineId])
+  @@index([routeId])
   @@index([pnr])
   @@index([travelDate])
   @@map("tickets")
@@ -56,11 +77,18 @@ model TicketPayment {
   ticketId   String
   ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
-  amount     Decimal       @db.Decimal(12, 2)
-  method     PaymentMethod @default(CASH)
-  reference  String?
-  note       String?       @db.Text
-  paidAt     DateTime      @default(now())
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod @default(CASH)
+
+  /// Cash collected on a sale lands in a real account. In the previous
+  /// implementation TicketPayment had no account at all, so ticket collections
+  /// never reached the balance sheet.
+  cashAccountId String
+  cashAccount   CashAccount   @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  reference     String?
+  note          String?       @db.Text
+  paidAt        DateTime      @default(now())
 
   recordedById String?
 
@@ -69,6 +97,7 @@ model TicketPayment {
 
   @@index([ticketId])
   @@index([agencyId])
+  @@index([cashAccountId])
   @@map("ticket_payments")
 }
 

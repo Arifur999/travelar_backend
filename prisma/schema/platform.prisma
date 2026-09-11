@@ -1,0 +1,129 @@
+/// Platform-wide broadcast from the super admin to every agency. Deliberately
+/// has no agencyId — it is global by design.
+model Announcement {
+  id          String             @id @default(uuid(7))
+
+  title       String
+  message     String             @db.Text
+  type        AnnouncementType   @default(INFO)
+  isActive    Boolean            @default(true)
+
+  createdById String
+  createdBy   User               @relation("AnnouncementAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  reads       AnnouncementRead[]
+
+  @@index([isActive, createdAt])
+  @@map("announcements")
+}
+
+/// Read receipt. Upserted, so marking read twice is harmless.
+model AnnouncementRead {
+  id             String       @id @default(uuid(7))
+
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  readAt         DateTime     @default(now())
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_reads")
+}
+
+/// Helpdesk thread between an agency and the platform operator.
+model SupportTicket {
+  id          String           @id @default(uuid(7))
+
+  agencyId    String
+  agency      Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User             @relation("SupportTicketAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  subject     String
+  category    SupportCategory  @default(OTHER)
+  priority    SupportPriority  @default(MEDIUM)
+  status      SupportStatus    @default(OPEN)
+
+  createdAt   DateTime         @default(now())
+  /// Bumped on every reply so the list can sort by most-recently-active.
+  updatedAt   DateTime         @updatedAt
+
+  messages    SupportMessage[]
+
+  @@index([agencyId])
+  @@index([status, updatedAt])
+  @@index([agencyId, updatedAt])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id              String        @id @default(uuid(7))
+
+  supportTicketId String
+  supportTicket   SupportTicket @relation(fields: [supportTicketId], references: [id], onDelete: Cascade)
+
+  senderId        String
+  sender          User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  /// Snapshotted so the thread still renders correctly if the sender's role
+  /// changes later. Typed, unlike the free-form string it replaces.
+  senderRole      Role
+
+  message         String        @db.Text
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([supportTicketId, createdAt])
+  @@map("support_messages")
+}
+
+/// Audit trail of super-admin actions. Written fire-and-forget: a logging
+/// failure must never break the action being logged.
+model AdminActivityLog {
+  id         String   @id @default(uuid(7))
+
+  adminId    String
+  admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  action     String
+  targetType String
+  /// Polymorphic — points at whichever table targetType names, so no FK.
+  targetId   String?
+  details    Json     @default("{}")
+
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([targetType])
+  @@index([createdAt])
+  @@map("admin_activity_logs")
+}
+
+/// Append-only record of every plan change an agency has been through.
+model PlanHistory {
+  id           String            @id @default(uuid(7))
+
+  agencyId     String
+  agency       Agency            @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  /// Null for TRIAL_EXTENDED, which changes no plan.
+  planId       String?
+  plan         Plan?             @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  action       PlanHistoryAction
+  assignedAt   DateTime          @default(now())
+  assignedById String?
+
+  @@index([agencyId, assignedAt])
+  @@index([planId])
+  @@map("plan_histories")
+}

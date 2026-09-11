@@ -1,0 +1,74 @@
+model AirlineMaster {
+  id          String    @id @default(uuid(7))
+
+  agencyId    String
+  agency      Agency    @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  name        String
+  shortCode   String
+  logoUrl     String?
+  remark      String?   @db.Text
+
+  createdById String?
+
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tickets     Ticket[]
+
+  @@unique([agencyId, shortCode])
+  @@unique([agencyId, name])
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@map("airline_masters")
+}
+
+model RouteMaster {
+  id          String    @id @default(uuid(7))
+
+  agencyId    String
+  agency      Agency    @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  /// Free-form sector string as the agency writes it, e.g. "DAC-SIN" or
+  /// "YYZ-DAC-YYZ" for a multi-leg return.
+  name        String
+  remark      String?   @db.Text
+
+  createdById String?
+
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tickets     Ticket[]
+
+  @@unique([agencyId, name])
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@map("route_masters")
+}
+
+/// Per-month sales and profit targets, used by the dashboards to show
+/// goal-versus-actual. Set in Settings, one row per agency per month.
+model MonthlyGoal {
+  id         String   @id @default(uuid(7))
+
+  agencyId   String
+  agency     Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  year       Int
+  month      Int
+  salesGoal  Decimal  @db.Decimal(14, 2) @default(0)
+  profitGoal Decimal  @db.Decimal(14, 2) @default(0)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([agencyId, year, month])
+  @@index([agencyId])
+  @@index([agencyId, year])
+  @@map("monthly_goals")
+}

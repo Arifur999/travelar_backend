@@ -1,0 +1,51 @@
+model ExpenseCategory {
+  id            String    @id @default(uuid(7))
+
+  agencyId      String
+  agency        Agency    @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  name          String
+  /// Hex swatch used by the category donut on the expense dashboard.
+  color         String?
+  monthlyBudget Decimal   @db.Decimal(14, 2) @default(0)
+  yearlyBudget  Decimal   @db.Decimal(14, 2) @default(0)
+
+  isDeleted     Boolean   @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  expenses      Expense[]
+
+  @@unique([agencyId, name])
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id            String          @id @default(uuid(7))
+
+  agencyId      String
+  agency        Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  categoryId    String
+  category      ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  date          DateTime        @default(now())
+  amount        Decimal         @db.Decimal(14, 2)
+
+  cashAccountId String
+  cashAccount   CashAccount     @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  notes         String?         @db.Text
+  createdById   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([agencyId])
+  @@index([categoryId])
+  @@index([cashAccountId])
+  @@index([agencyId, date])
+  @@map("expenses")
+}

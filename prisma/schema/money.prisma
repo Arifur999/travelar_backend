@@ -1,0 +1,165 @@
+/// A place money sits: a bank account, a mobile-money wallet, or cash in hand.
+///
+/// The balance is NOT stored here. It is always derived as
+/// `openingBalance + Σ(IN postings) − Σ(OUT postings)` through the single
+/// helper in the account service. The previous implementation kept a stored
+/// `currentBalance` AND separately re-derived it on the overview endpoint from
+/// only three of the six writers, so the two figures silently disagreed by the
+/// value of every supplier payment and staff payout. One definition, one code
+/// path, no drift.
+model CashAccount {
+  id             String              @id @default(uuid(7))
+
+  agencyId       String
+  agency         Agency              @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  name           String
+  category       CashAccountCategory @default(OTHERS)
+  openingBalance Decimal             @db.Decimal(14, 2) @default(0)
+  isActive       Boolean             @default(true)
+
+  createdById    String?
+
+  isDeleted      Boolean             @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  postings          AccountPosting[]
+  transfersOut      BalanceTransfer[]     @relation("TransferFrom")
+  transfersIn       BalanceTransfer[]     @relation("TransferTo")
+  supplierPayments  SupplierTransaction[]
+  expenses          Expense[]
+  employeePayouts   EmployeeTransaction[]
+  capitalFlows      CapitalFlow[]
+  profitWithdrawals ProfitWithdrawal[]
+  dueReceivedFirst  DueReceived[]         @relation("DueAccount1")
+  dueReceivedSecond DueReceived[]         @relation("DueAccount2")
+  ticketPayments    TicketPayment[]
+
+  /// A soft-deleted account keeps its name reserved on purpose — two accounts
+  /// with the same name, one deleted, would make an audit trail ambiguous.
+  @@unique([agencyId, name])
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@map("cash_accounts")
+}
+
+/// The single ledger. Every movement of money — a sale payment, a supplier
+/// payout, an expense, a transfer, owner capital — writes exactly one row here,
+/// and an account's balance is the sum of its rows. Deleting the thing that
+/// caused a posting deletes its postings, which is what makes every operation
+/// exactly reversible.
+model AccountPosting {
+  id            String           @id @default(uuid(7))
+
+  agencyId      String
+  agency        Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  cashAccountId String
+  cashAccount   CashAccount      @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  direction     PostingDirection
+  amount        Decimal          @db.Decimal(14, 2)
+  source        PostingSource
+
+  /// Points back at the row that caused this posting (polymorphic, so it
+  /// carries no FK). The service deletes by (source, sourceId) to reverse
+  /// exactly its own postings and nothing else.
+  sourceId      String?
+
+  postedAt      DateTime         @default(now())
+  note          String?          @db.Text
+  createdById   String?
+  createdAt     DateTime         @default(now())
+
+  @@index([agencyId])
+  @@index([cashAccountId])
+  @@index([agencyId, postedAt])
+  @@index([source, sourceId])
+  @@map("account_postings")
+}
+
+/// Moving money between two of the agency's own accounts. Net effect on total
+/// balance is zero; it writes a TRANSFER_OUT and a TRANSFER_IN posting.
+model BalanceTransfer {
+  id              String      @id @default(uuid(7))
+
+  agencyId        String
+  agency          Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  fromAccountId   String
+  fromAccount     CashAccount @relation("TransferFrom", fields: [fromAccountId], references: [id], onDelete: Restrict)
+
+  toAccountId     String
+  toAccount       CashAccount @relation("TransferTo", fields: [toAccountId], references: [id], onDelete: Restrict)
+
+  amount          Decimal     @db.Decimal(14, 2)
+  date            DateTime    @default(now())
+  note            String?     @db.Text
+
+  transferredById String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([agencyId])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+  @@index([agencyId, date])
+  @@map("balance_transfers")
+}
+
+/// Owner capital in and out. Absent from the previous implementation entirely —
+/// the `OWNER_FUNDS` account category was a label with no behaviour behind it.
+model CapitalFlow {
+  id            String          @id @default(uuid(7))
+
+  agencyId      String
+  agency        Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  ownerName     String
+  type          CapitalFlowType
+  amount        Decimal         @db.Decimal(14, 2)
+  date          DateTime        @default(now())
+
+  cashAccountId String
+  cashAccount   CashAccount     @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  note          String?         @db.Text
+  createdById   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([agencyId])
+  @@index([cashAccountId])
+  @@index([agencyId, date])
+  @@map("capital_flows")
+}
+
+/// Profit taken out of the business by an owner. Tracked separately from
+/// CapitalFlow because it reduces retained profit rather than invested capital,
+/// and the dashboards report the two on different lines.
+model ProfitWithdrawal {
+  id            String      @id @default(uuid(7))
+
+  agencyId      String
+  agency        Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  date          DateTime    @default(now())
+
+  cashAccountId String
+  cashAccount   CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  amount        Decimal     @db.Decimal(14, 2)
+  receivedBy    String
+  note          String?     @db.Text
+
+  createdById   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([agencyId])
+  @@index([cashAccountId])
+  @@index([agencyId, date])
+  @@map("profit_withdrawals")
+}

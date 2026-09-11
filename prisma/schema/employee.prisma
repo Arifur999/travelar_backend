@@ -1,0 +1,94 @@
+/// Agency staff, for payroll and attendance. Gated behind the EXPENSE plan
+/// feature rather than one of its own, because payouts debit a cash account.
+model Employee {
+  id           String                @id @default(uuid(7))
+
+  agencyId     String
+  agency       Agency                @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  name         String
+  phone        String
+  address      String?               @db.Text
+
+  joinDate     DateTime              @db.Date
+  /// Presence of a resign date is what makes an employee inactive — there is no
+  /// separate isActive column to fall out of sync with it.
+  resignDate   DateTime?             @db.Date
+
+  createdById  String?
+
+  isDeleted    Boolean               @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  attendance   EmployeeAttendance[]
+  transactions EmployeeTransaction[]
+
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@map("employees")
+}
+
+model EmployeeAttendance {
+  id          String           @id @default(uuid(7))
+
+  agencyId    String
+  agency      Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  employeeId  String
+  employee    Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  /// A calendar day, not an instant. @db.Date sidesteps the timezone bug in the
+  /// previous implementation, where the write path normalised with local
+  /// setHours(0,0,0,0) while the read filter used a UTC string.
+  date        DateTime         @db.Date
+  status      AttendanceStatus
+
+  /// Clock times as typed, e.g. "09:30 AM". Kept as text because they are
+  /// wall-clock labels, not instants; totalHours is computed from them.
+  startTime   String?
+  endTime     String?
+  totalHours  Decimal          @db.Decimal(6, 2) @default(0)
+
+  note        String?          @db.Text
+  createdById String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([agencyId])
+  @@index([agencyId, date])
+  @@map("employee_attendance")
+}
+
+model EmployeeTransaction {
+  id            String             @id @default(uuid(7))
+
+  agencyId      String
+  agency        Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  employeeId    String
+  employee      Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  date          DateTime           @default(now())
+  type          EmployeePayoutType
+  amount        Decimal            @db.Decimal(14, 2)
+
+  cashAccountId String
+  cashAccount   CashAccount        @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  /// Days covered by a salary payment. Only meaningful when type is SALARY.
+  totalDays     Int?
+
+  note          String?            @db.Text
+  createdById   String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([agencyId])
+  @@index([employeeId])
+  @@index([cashAccountId])
+  @@index([agencyId, date])
+  @@map("employee_transactions")
+}
