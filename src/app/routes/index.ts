@@ -1,7 +1,9 @@
 import { Router } from "express";
+import { AdminRoutes } from "../module/admin/admin.route.js";
 import { AirlineMasterRoutes } from "../module/airlineMaster/airlineMaster.route.js";
 import { AuthRoutes } from "../module/auth/auth.route.js";
 import { BalanceTransferRoutes } from "../module/balanceTransfer/balanceTransfer.route.js";
+import { BillingRoutes, billingWebhookRouter } from "../module/billing/billing.route.js";
 import { CapitalRoutes } from "../module/capital/capital.route.js";
 import { CashAccountRoutes } from "../module/cashAccount/cashAccount.route.js";
 import { CustomerRoutes } from "../module/customer/customer.route.js";
@@ -13,6 +15,7 @@ import { HajjRoutes } from "../module/hajj/hajj.route.js";
 import { RouteMasterRoutes } from "../module/routeMaster/routeMaster.route.js";
 import { SupplierRoutes } from "../module/supplier/supplier.route.js";
 import { SupplierTransactionRoutes } from "../module/supplierTransaction/supplierTransaction.route.js";
+import { SupportRoutes, adminSupportRouter } from "../module/support/support.route.js";
 import { TicketRoutes } from "../module/ticket/ticket.route.js";
 import { VisaRoutes } from "../module/visa/visa.route.js";
 
@@ -34,5 +37,12 @@ router.use("/visa", VisaRoutes);
 router.use("/hajj", HajjRoutes);
 router.use("/employees", EmployeeRoutes);
 router.use("/dashboard", DashboardRoutes);
+router.use("/billing", BillingRoutes);
+router.use("/admin", AdminRoutes);
+router.use("/admin", adminSupportRouter);
+router.use("/support", SupportRoutes);
+
+// Public gateway callbacks — no session, called server-to-server.
+router.use("/billing", billingWebhookRouter);
 
 export const indexRoute = router;

@@ -2,6 +2,7 @@ import { Server } from "http";
 import app from "./app.js";
 import { env } from "./config/env.js";
 import { redisService } from "./app/lib/redis.js";
+import { seedSuperAdmin } from "./app/utils/seed.js";
 import { initErrorMonitoring } from "./app/lib/sentry.js";
 
 let server: Server;
@@ -9,6 +10,9 @@ let server: Server;
 const bootstrap = async () => {
   try {
     initErrorMonitoring();
+
+    // The platform needs an operator before it can manage any tenant.
+    await seedSuperAdmin();
 
     // Redis is optional — a failure here must not stop the server booting.
     await redisService.connect().catch(console.error);
