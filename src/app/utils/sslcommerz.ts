@@ -46,7 +46,6 @@ export const buildTransactionId = () => `ORD-${Date.now()}-${crypto.randomBytes(
 
 export const createPaymentSession = async (args: ICheckoutSessionArgs): Promise<ISslSessionResponse> => {
   const appBase = env.BETTER_AUTH_URL;
-  const clientBase = env.FRONTEND_URL;
 
   const params = new URLSearchParams({
     store_id: env.SSLCOMMERZ.STORE_ID,

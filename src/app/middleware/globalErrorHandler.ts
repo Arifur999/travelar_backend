@@ -18,7 +18,7 @@ import { captureException } from "../lib/sentry.js";
 import { deleteUploadedFilesFromGlobalErrorHandler } from "../utils/deleteUploadedFilesFromGlobalError.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const globalErrorHandler = async (err: any, req: Request, res: Response, next: NextFunction) => {
+export const globalErrorHandler = async (err: any, req: Request, res: Response, _next: NextFunction) => {
   if (env.NODE_ENV === "development") {
     console.log("Error from Global Error Handler", err);
   }

@@ -259,16 +259,62 @@ const getCustomerDashboard = async (agencyId: string, sort?: string) => {
 
 const getCustomerById = async (agencyId: string, id: string) => computeDue(agencyId, id);
 
-/** Chronological statement with a running due, opening balance first. */
+type LedgerRowType =
+  | "opening"
+  | "ticket"
+  | "ticket-payment"
+  | "visa"
+  | "visa-payment"
+  | "hajj"
+  | "hajj-payment"
+  | "due-received"
+  | "discount";
+
+type LedgerRow = {
+  date: Date;
+  type: LedgerRowType;
+  description: string;
+  debit: number;
+  credit: number;
+  runningDue: number;
+};
+
+/**
+ * Chronological statement with a running due, opening balance first.
+ *
+ * It must end exactly on `currentDue`, so it reads the same rows with the same
+ * rules as attachLedgerTotals: every non-deleted ticket, visa case and Hajj
+ * booking, their payments, and due receipts. It used to list tickets only, so
+ * for any customer with a visa or Hajj sale the statement stopped short of the
+ * balance shown right above it. Change one of the two and the other has to
+ * follow — the tripwire at the bottom logs if they ever disagree again.
+ */
 const getCustomerLedger = async (agencyId: string, id: string) => {
   const customer = await computeDue(agencyId, id);
 
-  const [tickets, dueReceipts] = await Promise.all([
+  const [tickets, visaCases, hajjBookings, dueReceipts] = await Promise.all([
     prisma.ticket.findMany({
       where: { agencyId, customerId: id, isDeleted: false },
       select: {
-        id: true, pnr: true, fare: true, dateChangeFee: true, refundAmount: true,
-        issueDate: true, createdAt: true,
+        id: true, pnr: true, passengerName: true, fare: true, dateChangeFee: true,
+        refundAmount: true, issueDate: true, createdAt: true,
+        payments: { include: { cashAccount: { select: { name: true } } } },
+      },
+    }),
+    prisma.visaCase.findMany({
+      where: { agencyId, customerId: id, isDeleted: false },
+      select: {
+        id: true, country: true, visaType: true, applicationNo: true, serviceFee: true,
+        embassyFee: true, submittedAt: true, createdAt: true,
+        payments: { include: { cashAccount: { select: { name: true } } } },
+      },
+    }),
+    prisma.hajjBooking.findMany({
+      where: { agencyId, customerId: id, isDeleted: false },
+      select: {
+        id: true, pilgrimName: true, packagePrice: true, status: true, createdAt: true,
+        hajjPackage: { select: { name: true } },
+        payments: { include: { cashAccount: { select: { name: true } } } },
       },
     }),
     prisma.dueReceived.findMany({
@@ -280,43 +326,77 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
     }),
   ]);
 
-  const ticketPayments = await prisma.ticketPayment.findMany({
-    where: { agencyId, ticketId: { in: tickets.map((t) => t.id) } },
-    include: { cashAccount: { select: { name: true } } },
-  });
-
-  const pnrOf = new Map(tickets.map((t) => [t.id, t.pnr]));
-
-  type LedgerRow = {
-    date: Date;
-    type: string;
-    description: string;
-    debit: number;
-    credit: number;
-    runningDue: number;
-  };
-
   const events: Omit<LedgerRow, "runningDue">[] = [];
 
   for (const ticket of tickets) {
     events.push({
       date: ticket.issueDate ?? ticket.createdAt,
       type: "ticket",
-      description: `Ticket booking — PNR ${ticket.pnr}`,
+      description: `Ticket — PNR ${ticket.pnr}, ${ticket.passengerName}`,
       debit:
         toNumber(ticket.fare) + toNumber(ticket.dateChangeFee) - toNumber(ticket.refundAmount),
       credit: 0,
     });
+
+    for (const payment of ticket.payments) {
+      events.push({
+        date: payment.paidAt,
+        type: "ticket-payment",
+        description: `Ticket payment — PNR ${ticket.pnr} (${payment.cashAccount.name})`,
+        debit: 0,
+        credit: toNumber(payment.amount),
+      });
+    }
   }
 
-  for (const payment of ticketPayments) {
+  for (const visaCase of visaCases) {
+    const label = `${visaCase.country} ${visaCase.visaType}${
+      visaCase.applicationNo ? `, #${visaCase.applicationNo}` : ""
+    }`;
+
     events.push({
-      date: payment.paidAt,
-      type: "payment",
-      description: `Payment received — PNR ${pnrOf.get(payment.ticketId) ?? ""} (${payment.cashAccount.name})`,
-      debit: 0,
-      credit: toNumber(payment.amount),
+      date: visaCase.submittedAt ?? visaCase.createdAt,
+      type: "visa",
+      description: `Visa — ${label}`,
+      debit: toNumber(visaCase.serviceFee) + toNumber(visaCase.embassyFee),
+      credit: 0,
     });
+
+    for (const payment of visaCase.payments) {
+      events.push({
+        date: payment.paidAt,
+        type: "visa-payment",
+        description: `Visa payment — ${label} (${payment.cashAccount.name})`,
+        debit: 0,
+        credit: toNumber(payment.amount),
+      });
+    }
+  }
+
+  for (const booking of hajjBookings) {
+    const label = `${booking.hajjPackage.name}, ${booking.pilgrimName}`;
+    const cancelled = booking.status === HajjBookingStatus.CANCELLED;
+
+    // A cancelled booking bills nothing — the same rule the totals use — but
+    // it stays on the statement so the payments taken against it still have a
+    // line to belong to. Money kept from it leaves the customer in credit.
+    events.push({
+      date: booking.createdAt,
+      type: "hajj",
+      description: cancelled ? `Hajj — ${label} (cancelled, not billed)` : `Hajj — ${label}`,
+      debit: cancelled ? 0 : toNumber(booking.packagePrice),
+      credit: 0,
+    });
+
+    for (const payment of booking.payments) {
+      events.push({
+        date: payment.paidAt,
+        type: "hajj-payment",
+        description: `Hajj payment — ${label} (${payment.cashAccount.name})`,
+        debit: 0,
+        credit: toNumber(payment.amount),
+      });
+    }
   }
 
   for (const receipt of dueReceipts) {
@@ -341,7 +421,9 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
     }
   }
 
-  events.sort((a, b) => a.date.getTime() - b.date.getTime());
+  // On the same instant a charge goes before the money against it, so the
+  // running due never dips into a credit that did not really exist.
+  events.sort((a, b) => a.date.getTime() - b.date.getTime() || b.debit - a.debit);
 
   let running = customer.openingDue;
   const rows: LedgerRow[] = [
@@ -358,6 +440,15 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
   for (const event of events) {
     running = running + event.debit - event.credit;
     rows.push({ ...event, runningDue: running });
+  }
+
+  // Tripwire: the statement and the headline figure are derived separately.
+  // If a future change teaches one about a new kind of sale and not the other,
+  // this says so in the logs instead of letting customers see two numbers.
+  if (Math.abs(running - customer.currentDue) > 0.005) {
+    console.error(
+      `Customer ledger ${id} ends at ${running} but currentDue is ${customer.currentDue} — the two derivations have drifted`,
+    );
   }
 
   return { customer, rows };

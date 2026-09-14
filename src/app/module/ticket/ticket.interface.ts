@@ -13,7 +13,7 @@ export interface ICreateTicketPayload {
   cost: number;
 }
 
-export interface IUpdateTicketPayload extends Partial<ICreateTicketPayload> {}
+export type IUpdateTicketPayload = Partial<ICreateTicketPayload>;
 
 export interface ITicketDateChangePayload {
   dateChangedAt?: string;
