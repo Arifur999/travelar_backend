@@ -1,5 +1,5 @@
 import { env } from "../../config/env.js";
-import { Role, UserStatus } from "../../generated/prisma/enums.js";
+import { Role } from "../../generated/prisma/enums.js";
 import { auth } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 
@@ -27,19 +27,14 @@ export const seedSuperAdmin = async () => {
         name: env.SUPER_ADMIN_NAME,
         email: env.SUPER_ADMIN_EMAIL,
         password: env.SUPER_ADMIN_PASSWORD,
-        role: Role.SUPER_ADMIN,
-        status: UserStatus.ACTIVE,
-        agencyId: null,
-        needPasswordChange: false,
-        isDeleted: false,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      },
     });
 
     createdUserId = signUp.user.id;
 
-    // better-auth writes its defaults on sign-up, so the role has to be set
-    // explicitly afterwards — and the operator never has an email to verify.
+    // The role columns are `input: false` in lib/auth.ts, so better-auth writes
+    // its defaults on sign-up and the role has to be set here — and the
+    // operator never has an email to verify.
     await prisma.user.update({
       where: { id: signUp.user.id },
       data: { role: Role.SUPER_ADMIN, emailVerified: true, agencyId: null },

@@ -1,11 +1,9 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { Application, Request, Response } from "express";
-import { toNodeHandler } from "better-auth/node";
 import path from "path";
 import qs from "qs";
 import { env } from "./config/env.js";
-import { auth } from "./app/lib/auth.js";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler.js";
 import notFound from "./app/middleware/notFound.js";
 import { indexRoute } from "./app/routes/index.js";
@@ -34,9 +32,17 @@ app.use(
   }),
 );
 
-// better-auth reads the unconsumed request stream itself, so it must be
-// mounted before express.json().
-app.use("/api/auth", toNodeHandler(auth));
+// better-auth's own HTTP router (/api/auth/*) is deliberately NOT mounted.
+// Every auth flow goes through /api/v1/auth, which calls auth.api.* in-process,
+// and the frontend uses none of better-auth's routes. Mounting it exposed:
+//  - POST /sign-up/email, which accepted `role` and `agencyId` from an
+//    anonymous body — anyone could create a SUPER_ADMIN, or join any agency;
+//  - POST /update-user, which let a signed-in user rewrite the same columns;
+//  - POST /sign-in/email, a second login that skipped authRateLimiter and the
+//    blocked/deleted checks in AuthService.verifyCredentials.
+// If a future flow (OAuth callback, password reset) needs one of its routes,
+// mount that single path, before express.json() — better-auth reads the raw
+// request stream itself.
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

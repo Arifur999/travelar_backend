@@ -32,23 +32,14 @@ const registerAgency = async (payload: IRegisterPayload) => {
     // better-auth owns the user row, so it cannot take part in a Prisma
     // transaction. If it fails, the agency created above has to be removed by
     // hand or a half-registered tenant is left behind.
+    // Role and tenant are not passed here: they are `input: false` in
+    // lib/auth.ts, so better-auth would write its defaults regardless.
     const signUp = await auth.api.signUpEmail({
-      // The extra columns are declared through better-auth's additionalFields,
-      // which its generated body type does not narrow to.
-      body: {
-        name: payload.name,
-        email: payload.email,
-        password: payload.password,
-        role: Role.AGENCY_ADMIN,
-        status: UserStatus.ACTIVE,
-        agencyId: agency.id,
-        needPasswordChange: false,
-        isDeleted: false,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      body: { name: payload.name, email: payload.email, password: payload.password },
     });
 
     // The first user of an agency is its admin and needs no email round-trip.
+    // This update is what actually makes them one.
     await prisma.user.update({
       where: { id: signUp.user.id },
       data: { emailVerified: true, role: Role.AGENCY_ADMIN, agencyId: agency.id },

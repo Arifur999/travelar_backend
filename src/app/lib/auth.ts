@@ -21,14 +21,21 @@ export const auth = betterAuth({
 
   // Extra columns on User that better-auth must know how to write. agencyId is
   // the tenant key every business query scopes on.
+  //
+  // Every one is `input: false`. Left at better-auth's default they are
+  // client-writable: sign-up took `role: "SUPER_ADMIN"` from an anonymous body
+  // and update-user let a user move themselves into another agency. With input
+  // off, better-auth writes the default on create and rejects the field on
+  // update — so the services set these with Prisma after signUpEmail, which is
+  // the only place a role or tenant is ever decided.
   user: {
     additionalFields: {
-      role: { type: "string", required: true, defaultValue: Role.AGENCY_STAFF },
-      status: { type: "string", required: true, defaultValue: UserStatus.ACTIVE },
-      needPasswordChange: { type: "boolean", required: true, defaultValue: false },
-      agencyId: { type: "string", required: false, defaultValue: null },
-      isDeleted: { type: "boolean", required: true, defaultValue: false },
-      deletedAt: { type: "date", required: false, defaultValue: null },
+      role: { type: "string", required: true, defaultValue: Role.AGENCY_STAFF, input: false },
+      status: { type: "string", required: true, defaultValue: UserStatus.ACTIVE, input: false },
+      needPasswordChange: { type: "boolean", required: true, defaultValue: false, input: false },
+      agencyId: { type: "string", required: false, defaultValue: null, input: false },
+      isDeleted: { type: "boolean", required: true, defaultValue: false, input: false },
+      deletedAt: { type: "date", required: false, defaultValue: null, input: false },
     },
   },
 
