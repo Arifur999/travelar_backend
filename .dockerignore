@@ -1,7 +1,19 @@
+# Installed and generated inside the image; host copies are for another OS
+# (a Windows-generated Prisma client or esbuild binary would break on Alpine).
 node_modules
 dist
-.git
-.gitignore
+src/generated
+.pnpm-store
+uploads
+
+# Secrets never go into an image layer — they arrive as runtime env.
 .env
 .env.*
+!.env.example
+!.env.production.example
+
+.git
+.gitignore
 *-debug.log*
+*.log
+docs

@@ -20,6 +20,37 @@ pnpm dev                      # API on http://localhost:5050
 > and silently wins over the container, which shows up as `P1000: Authentication
 > failed`.
 
+## Run the full stack in Docker
+
+Postgres, migrations, this API and the [web app](https://github.com/Arifur999/travelar)
+as production containers. Expects the frontend repo checked out next to this one
+(`../travel_agency`).
+
+```bash
+cp .env.production.example .env.production     # fill in every value
+docker compose -f docker-compose.production.yaml --env-file .env.production up -d --build
+```
+
+Start-up order is enforced: `db` healthy → `migrate` runs `prisma migrate deploy`
+and exits 0 → `api` healthy (`GET /health` runs `SELECT 1`) → `web`. The
+operator account is created from `SUPER_ADMIN_*` on first boot. Both app
+containers run as a non-root user and read all configuration at runtime.
+
+- **Put it behind a TLS reverse proxy.** In production the auth cookies are
+  `Secure`, and SSLCommerz must reach `API_PUBLIC_URL` over the internet.
+- **One secret, two services.** The web container's `JWT_ACCESS_SECRET` is
+  wired from `ACCESS_TOKEN_SECRET`, so the two cannot drift apart.
+- **Set `REDIS_URL` when running more than one API instance.** Without it,
+  login throttling is counted in memory: it still applies, but each instance
+  keeps its own count.
+- Logins arrive from the web server, not the browser, so the web app forwards
+  the client address in `X-Forwarded-For` and the API (`trust proxy`) keys its
+  per-IP limit on it. Sign-in attempts are also capped per account, which a
+  forged address does not get around.
+
+This is separate from `docker-compose.yaml`, which is only the local
+development database; the two use different project names, volumes and ports.
+
 ## Architecture
 
 Feature-first modules under `src/app/module/<feature>/`, one-way layering

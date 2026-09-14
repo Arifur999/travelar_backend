@@ -4,6 +4,7 @@ import express, { Application, Request, Response } from "express";
 import path from "path";
 import qs from "qs";
 import { env } from "./config/env.js";
+import { prisma } from "./app/lib/prisma.js";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler.js";
 import notFound from "./app/middleware/notFound.js";
 import { indexRoute } from "./app/routes/index.js";
@@ -20,7 +21,9 @@ app.set("view engine", "ejs");
 app.set("views", path.resolve(process.cwd(), "src/app/templates"));
 
 // Behind a proxy (Render, Vercel, nginx) every request otherwise lands in one
-// rate-limit bucket with the proxy's own IP.
+// rate-limit bucket with the proxy's own IP. The Next server is such a hop
+// too: logins arrive from it, not from the browser, so it forwards the
+// client's address in X-Forwarded-For and this setting makes req.ip read it.
 app.set("trust proxy", 1);
 
 app.use(
@@ -52,6 +55,18 @@ app.use("/api/v1", indexRoute);
 
 app.get("/", async (req: Request, res: Response) => {
   res.status(200).json({ success: true, message: "Travelar API is working" });
+});
+
+// For container healthchecks and load balancers. Unlike `/`, this touches the
+// database, so a process that is up but cannot reach Postgres reports 503
+// instead of receiving traffic it will fail.
+app.get("/health", async (req: Request, res: Response) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ success: true, message: "ok", database: "up" });
+  } catch {
+    res.status(503).json({ success: false, message: "database unreachable", database: "down" });
+  }
 });
 
 // notFound first: it is a 2-arg handler that only runs when nothing matched.

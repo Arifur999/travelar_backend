@@ -29,6 +29,17 @@ class RedisService {
     }
   }
 
+  /**
+   * Logs a failed call only when Redis was supposed to be there. With REDIS_URL
+   * unset every call "fails" by design, and logging each one printed a full
+   * stack trace per login attempt. A configured-but-down Redis still gets a
+   * one-line message, without the stack.
+   */
+  private logFailure(action: string, error: unknown) {
+    if (!env.REDIS_URL) return;
+    console.error(`Redis ${action} failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   private ensureConnected(): RedisClientType {
     if (!this.client || !this.isConnected) {
       throw new Error("Redis is not connected");
@@ -60,7 +71,7 @@ class RedisService {
         await client.set(key, payload);
       }
     } catch (error) {
-      console.error("Error setting Redis key:", error);
+      this.logFailure("set", error);
     }
   }
 
@@ -68,7 +79,7 @@ class RedisService {
     try {
       await this.ensureConnected().del(key);
     } catch (error) {
-      console.error("Error deleting Redis key:", error);
+      this.logFailure("delete", error);
     }
   }
 
@@ -85,7 +96,7 @@ class RedisService {
       }
       return count;
     } catch (error) {
-      console.error("Error incrementing Redis key:", error);
+      this.logFailure("increment", error);
       return null;
     }
   }

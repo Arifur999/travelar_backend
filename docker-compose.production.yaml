@@ -1,0 +1,110 @@
+# ---------------------------------------------------------------------------
+# The whole Travelar stack in containers: Postgres, migrations, API and web.
+#
+#   cp .env.production.example .env.production      # fill in every value
+#   docker compose -f docker-compose.production.yaml --env-file .env.production up -d --build
+#
+# Expects the frontend repo checked out next to this one (../travel_agency),
+# which is how the two repositories are developed.
+#
+# Separate from docker-compose.yaml on purpose: that file is the local dev
+# database only, and this stack uses its own project name, volume and ports so
+# it can run beside a dev setup without touching its data.
+# ---------------------------------------------------------------------------
+
+name: travelar-production
+
+x-api-env: &api-env
+  NODE_ENV: production
+  PORT: 5050
+  DATABASE_URL: postgresql://${POSTGRES_USER:-travelar}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-travelar}
+  REDIS_URL: ${REDIS_URL:-}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+  # The API's PUBLIC address. SSLCommerz posts payment results here, so it
+  # must be reachable from the internet in a real deployment.
+  BETTER_AUTH_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
+  ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET:?set ACCESS_TOKEN_SECRET}
+  REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:?set REFRESH_TOKEN_SECRET}
+  ACCESS_TOKEN_EXPIRES_IN: ${ACCESS_TOKEN_EXPIRES_IN:-1d}
+  REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
+  # The browser-facing web address: CORS, and where payments redirect back to.
+  FRONTEND_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+  TRIAL_DAYS: ${TRIAL_DAYS:-7}
+  EMAIL_SENDER_SMTP_HOST: ${EMAIL_SENDER_SMTP_HOST:-}
+  EMAIL_SENDER_SMTP_PORT: ${EMAIL_SENDER_SMTP_PORT:-465}
+  EMAIL_SENDER_SMTP_USER: ${EMAIL_SENDER_SMTP_USER:-}
+  EMAIL_SENDER_SMTP_PASS: ${EMAIL_SENDER_SMTP_PASS:-}
+  EMAIL_SENDER_SMTP_FROM: ${EMAIL_SENDER_SMTP_FROM:-}
+  CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+  CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+  CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+  SSLCOMMERZ_STORE_ID: ${SSLCOMMERZ_STORE_ID:-}
+  SSLCOMMERZ_STORE_PASSWORD: ${SSLCOMMERZ_STORE_PASSWORD:-}
+  SSLCOMMERZ_IS_LIVE: ${SSLCOMMERZ_IS_LIVE:-false}
+  SUPER_ADMIN_NAME: ${SUPER_ADMIN_NAME:-Super Admin}
+  SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:?set SUPER_ADMIN_EMAIL}
+  SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:?set SUPER_ADMIN_PASSWORD}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-travelar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-travelar}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # No published port: only the API and the migration job talk to Postgres.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Runs once per `up`, applies pending migrations, exits. The API waits for it
+  # to finish successfully, so it never starts against an old schema.
+  migrate:
+    build: .
+    image: travelar-api:latest
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    # Same image as migrate. Declaring the build here too means compose builds
+    # it locally instead of trying to pull travelar-api from a registry; the
+    # second build is a full cache hit.
+    build: .
+    image: travelar-api:latest
+    restart: unless-stopped
+    environment: *api-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${API_HOST_PORT:-5050}:5050"
+
+  web:
+    build: ../travel_agency
+    image: travelar-web:latest
+    restart: unless-stopped
+    environment:
+      # Server-to-server inside the compose network — never leaves the host.
+      API_BASE_URL: http://api:5050/api/v1
+      # Wired from the API's own secret, so the two can never drift apart (a
+      # mismatch silently bounces every protected page to /login).
+      JWT_ACCESS_SECRET: ${ACCESS_TOKEN_SECRET:?set ACCESS_TOKEN_SECRET}
+      NEXT_PUBLIC_SITE_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_HOST_PORT:-3000}:3000"
+
+volumes:
+  db-data:
