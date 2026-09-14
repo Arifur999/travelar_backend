@@ -9,7 +9,7 @@ import { IUpdateAgencyProfilePayload } from "./agency.interface.js";
  * settings page can show it; changing it goes through billing or the operator.
  */
 const getProfile = async (agencyId: string) => {
-  const [agency, members] = await Promise.all([
+  const [agency, members, owner] = await Promise.all([
     prisma.agency.findFirst({
       where: { id: agencyId, isDeleted: false },
       select: {
@@ -31,6 +31,14 @@ const getProfile = async (agencyId: string) => {
       where: { agencyId, isDeleted: false },
       _count: { _all: true },
     }),
+    // Same rule as TeamService.getOwnerId: the earliest admin still on the
+    // books. Returned so the team page can tell whether the viewer is the owner
+    // even when the owner is not on the page of rows it is showing.
+    prisma.user.findFirst({
+      where: { agencyId, role: Role.AGENCY_ADMIN, isDeleted: false },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    }),
   ]);
 
   if (!agency) throw new AppError(status.NOT_FOUND, "Agency not found");
@@ -45,6 +53,7 @@ const getProfile = async (agencyId: string) => {
       admins: count((row) => row.role === Role.AGENCY_ADMIN),
       staff: count((row) => row.role === Role.AGENCY_STAFF),
       blocked: count((row) => row.status === UserStatus.BLOCKED),
+      ownerId: owner?.id ?? null,
     },
   };
 };
