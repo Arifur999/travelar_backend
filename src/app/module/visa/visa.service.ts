@@ -39,9 +39,11 @@ const VISA_INCLUDE = {
  * None of it stored — the fees are the only inputs, so deriving is cheaper than
  * keeping a total in step with them.
  */
-const decorate = async (
+// Generic so callers keep the full row type — the spread below passes every
+// field through at runtime, and the signature now says so.
+const decorate = async <T extends { id: string; serviceFee: Prisma.Decimal; embassyFee: Prisma.Decimal }>(
   agencyId: string,
-  visaCase: { id: string; serviceFee: Prisma.Decimal; embassyFee: Prisma.Decimal },
+  visaCase: T,
 ) => {
   const [paid, documents] = await Promise.all([
     prisma.visaPayment.aggregate({ where: { agencyId, visaCaseId: visaCase.id }, _sum: { amount: true } }),

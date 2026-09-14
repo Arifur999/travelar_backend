@@ -90,14 +90,27 @@ Roles: `SUPER_ADMIN` (platform operator, belongs to no agency), `AGENCY_ADMIN`,
 
 ## Modules
 
-| Module | Feature gate | Status |
+All mounted under `/api/v1`. Deletes and reversals of posted money are
+`AGENCY_ADMIN` only throughout.
+
+| Mount | What it does | Plan feature |
 |---|---|---|
-| Auth / agency registration | — | in progress |
-| Ticketing + Customers | `TICKETING` | schema ready |
-| Visa processing | `VISA` | schema ready |
-| Hajj/Umrah | `HAJJ_UMRAH` | schema ready |
-| Reports | `REPORTS` | schema ready |
-| Billing (SSLCommerz) | — | schema ready |
+| `/auth` | Register an agency, login, refresh, `me`, change password | — |
+| `/agency`, `/team` | Agency profile; team members, roles, blocking, password resets | — |
+| `/customers`, `/due-received` | Customers with derived due and a full statement; collections with split tender | — |
+| `/ticketing`, `/airlines`, `/routes-master` | Ticket sales, payments, date changes, refunds, **PDF invoice** | `TICKETING` |
+| `/visa` | Visa cases, agents, documents, status, payments, **PDF invoice** | `VISA` |
+| `/hajj` | Packages, batches, rooms, bookings, payments, **PDF invoice** | `HAJJ_UMRAH` |
+| `/accounts`, `/balance-transfers` | Cash accounts on one posting ledger; transfers | `EXPENSE` |
+| `/suppliers`, `/supplier-transactions` | Supplier payable (accrued from purchases) and payments | `EXPENSE` |
+| `/expenses`, `/capital`, `/employees` | Expenses and categories; investment and withdrawals; staff payouts and attendance | `EXPENSE` |
+| `/dashboard` | Summary and goals; custom / monthly / yearly reports and cash flow | `REPORTS` for reports |
+| `/billing` | Plans, SSLCommerz checkout and IPN, payment history | — |
+| `/support` | Support tickets and announcements for agencies | — |
+| `/admin` | Platform console: plans, agencies, stats, support inbox, announcements, activity log (`SUPER_ADMIN`) | — |
+
+Invoices (`GET …/:id/invoice`) are rendered with PDFKit and embedded Noto
+Sans + Noto Sans Bengali, so Bangla names and the `৳` sign print correctly.
 
 ## Conventions
 

@@ -37,7 +37,21 @@ const BOOKING_INCLUDE = {
   madinahRoom: { select: { id: true, roomNumber: true, capacity: true } },
 } satisfies Prisma.HajjBookingInclude;
 
-const decorate = async (agencyId: string, booking: { id: string; packagePrice: Prisma.Decimal }) => {
+// Generic so callers keep the full row type — the spread below passes every
+// field through at runtime. packagePrice is Omit-ted from T because it is
+// replaced by a plain number; left in, the type claimed Decimal & number and a
+// caller that trusted it to still be a Decimal crashed.
+const decorate = async <T extends { id: string; packagePrice: Prisma.Decimal }>(
+  agencyId: string,
+  booking: T,
+): Promise<
+  Omit<T, "packagePrice"> & {
+    packagePrice: number;
+    totalPaid: number;
+    dueAmount: number;
+    documentsProgress: { received: number; total: number };
+  }
+> => {
   const [paid, documents] = await Promise.all([
     prisma.hajjPayment.aggregate({ where: { agencyId, bookingId: booking.id }, _sum: { amount: true } }),
     prisma.hajjDocument.groupBy({

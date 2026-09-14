@@ -3,6 +3,7 @@ import { PlanFeature, Role } from "../../../generated/prisma/enums.js";
 import { checkAuth } from "../../middleware/checkAuth.js";
 import { checkFeatureAccess, requireActiveSubscription } from "../../middleware/tenantGuards.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
+import { InvoiceController } from "../invoice/invoice.controller.js";
 import { TicketController } from "./ticket.controller.js";
 import { TicketValidation } from "./ticket.validation.js";
 
@@ -17,6 +18,9 @@ router.use(
 router.get("/", TicketController.getAllTickets);
 router.post("/", validateRequest(TicketValidation.createTicketZodSchema), TicketController.createTicket);
 
+// Printable invoice. Same gates as the rest of ticketing, so a locked module
+// cannot be read out through its PDF.
+router.get("/:id/invoice", InvoiceController.getTicketInvoice);
 router.get("/:id", TicketController.getTicketById);
 router.patch("/:id", validateRequest(TicketValidation.updateTicketZodSchema), TicketController.updateTicket);
 

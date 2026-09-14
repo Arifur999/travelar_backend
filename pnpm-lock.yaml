@@ -109,6 +109,12 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/noto-sans':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-sans-bengali':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@prisma/adapter-pg':
         specifier: ^7.3.0
         version: 7.10.0
@@ -160,6 +166,9 @@ importers:
       express:
         specifier: ^5.2.1
         version: 5.2.1(supports-color@7.2.0)
+      fontkit:
+        specifier: 2.0.4
+        version: 2.0.4
       http-status:
         specifier: ^2.1.0
         version: 2.1.0
@@ -212,6 +221,9 @@ importers:
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
+      '@types/fontkit':
+        specifier: ^2.0.9
+        version: 2.0.9
       '@types/jsonwebtoken':
         specifier: ^9.0.10
         version: 9.0.10
@@ -526,6 +538,12 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@fontsource/noto-sans-bengali@5.3.0':
+    resolution: {integrity: sha512-EFBMU0UvzyFSc1ERK369zfqEu6DMRuWmCQ2+2ahhQTQAIDPEyN1UYlQdQeFkheu2DWG2hfdwrhiLlGFl2sSr/A==}
+
+  '@fontsource/noto-sans@5.3.0':
+    resolution: {integrity: sha512-fBCog2PY7DiVVTEEqtI/Qdinx/knobHYfoGpjFXdfBX5RoJaBp1Prw2G75p0OIsdlMZg3cLo0c+YbIUYOxnQJw==}
+
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
     engines: {node: '>=18.18.0'}
@@ -803,6 +821,9 @@ packages:
 
   '@types/express@5.0.6':
     resolution: {integrity: sha512-sKYVuV7Sv9fbPIt/442koC7+IIwK5olP1KWeD88e/idgoJqDm3JV/YUiPwkoKK92ylff2MGxSz1CSjsXelx0YA==}
+
+  '@types/fontkit@2.0.9':
+    resolution: {integrity: sha512-qNYerFky3muCmZPq+R+B3cUDRA5OONw/oh6aGGFxx2LOBz6yu8eamKusrhkHnC6rc2fm76+G9z9QoWSB2SaQaw==}
 
   '@types/geojson@7946.0.16':
     resolution: {integrity: sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==}
@@ -2410,6 +2431,10 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
+  '@fontsource/noto-sans-bengali@5.3.0': {}
+
+  '@fontsource/noto-sans@5.3.0': {}
+
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -2685,6 +2710,10 @@ snapshots:
       '@types/body-parser': 1.19.6
       '@types/express-serve-static-core': 5.1.3
       '@types/serve-static': 2.2.0
+
+  '@types/fontkit@2.0.9':
+    dependencies:
+      '@types/node': 25.9.5
 
   '@types/geojson@7946.0.16': {}
 

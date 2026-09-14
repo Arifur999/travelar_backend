@@ -3,6 +3,7 @@ import { PlanFeature, Role } from "../../../generated/prisma/enums.js";
 import { checkAuth } from "../../middleware/checkAuth.js";
 import { checkFeatureAccess, requireActiveSubscription } from "../../middleware/tenantGuards.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
+import { InvoiceController } from "../invoice/invoice.controller.js";
 import { VisaController } from "./visa.controller.js";
 import { VisaValidation } from "./visa.validation.js";
 
@@ -36,6 +37,7 @@ router.post(
   VisaController.createVisaCase,
 );
 
+router.get("/:id/invoice", InvoiceController.getVisaInvoice);
 router.get("/:id", VisaController.getVisaCaseById);
 router.patch(
   "/:id",

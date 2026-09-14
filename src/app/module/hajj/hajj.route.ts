@@ -3,6 +3,7 @@ import { PlanFeature, Role } from "../../../generated/prisma/enums.js";
 import { checkAuth } from "../../middleware/checkAuth.js";
 import { checkFeatureAccess, requireActiveSubscription } from "../../middleware/tenantGuards.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
+import { InvoiceController } from "../invoice/invoice.controller.js";
 import { HajjController } from "./hajj.controller.js";
 import { HajjValidation } from "./hajj.validation.js";
 
@@ -35,6 +36,7 @@ router.delete("/rooms/:id", HajjController.deleteRoom);
 // Bookings
 router.get("/bookings", HajjController.getAllBookings);
 router.post("/bookings", validateRequest(HajjValidation.createBookingZodSchema), HajjController.createBooking);
+router.get("/bookings/:id/invoice", InvoiceController.getHajjInvoice);
 router.get("/bookings/:id", HajjController.getBookingById);
 router.patch("/bookings/:id/status", validateRequest(HajjValidation.changeStatusZodSchema), HajjController.changeBookingStatus);
 router.patch("/bookings/:id/room", validateRequest(HajjValidation.assignRoomZodSchema), HajjController.assignRoom);
