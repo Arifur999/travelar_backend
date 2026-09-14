@@ -108,6 +108,17 @@ const getMe = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const updateMe = catchAsync(async (req: Request, res: Response) => {
+  const result = await AuthService.updateMe(req.user, req.body);
+
+  sendResponse(res, {
+    httpStatus: status.OK,
+    success: true,
+    message: "Profile updated",
+    data: result,
+  });
+});
+
 const getMyFeatures = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.getMyFeatures(req.user);
 
@@ -169,10 +180,14 @@ const getNewToken = catchAsync(async (req: Request, res: Response) => {
 });
 
 const changePassword = catchAsync(async (req: Request, res: Response) => {
+  // Handed to better-auth as a bearer token, not as a cookie. Our cookie holds
+  // the raw session token, while better-auth only reads a *signed* session
+  // cookie — so forwarding it as `cookie:` found no session and every password
+  // change answered 401. The bearer() plugin signs a raw token itself.
   const headers = new Headers();
   const sessionToken = cookieUtils.getCookie(req, "better-auth.session_token");
   if (sessionToken) {
-    headers.set("cookie", `better-auth.session_token=${sessionToken}`);
+    headers.set("authorization", `Bearer ${sessionToken}`);
   }
 
   const result = await AuthService.changePassword(req.user, req.body, headers);
@@ -205,6 +220,7 @@ export const AuthController = {
   register,
   login,
   getMe,
+  updateMe,
   getMyFeatures,
   getNewToken,
   changePassword,

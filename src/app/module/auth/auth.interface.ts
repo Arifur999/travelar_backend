@@ -16,6 +16,10 @@ export interface IChangePasswordPayload {
   newPassword: string;
 }
 
+export interface IUpdateMePayload {
+  name: string;
+}
+
 export interface IAuthTokens {
   accessToken: string;
   refreshToken: string;

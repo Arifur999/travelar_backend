@@ -14,6 +14,7 @@ router.post("/refresh-token", AuthController.getNewToken);
 
 // Authenticated, any role.
 router.get("/me", checkAuth(), AuthController.getMe);
+router.patch("/me", checkAuth(), validateRequest(AuthValidation.updateMeZodSchema), AuthController.updateMe);
 router.get("/my-features", checkAuth(), AuthController.getMyFeatures);
 router.post(
   "/change-password",

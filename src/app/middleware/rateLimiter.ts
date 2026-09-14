@@ -10,16 +10,14 @@ interface RateLimitOptions {
   message?: string;
 }
 
-const getClientIp = (req: Request): string => {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.length > 0) {
-    return forwarded.split(",")[0]!.trim();
-  }
-  if (Array.isArray(forwarded) && forwarded.length > 0) {
-    return forwarded[0]!.trim();
-  }
-  return req.ip || req.socket.remoteAddress || "unknown";
-};
+/**
+ * `req.ip`, never the raw X-Forwarded-For header. The header is whatever the
+ * client sends, and reading its first entry meant an attacker could put a new
+ * fake address on every login attempt and never reach the limit. With
+ * `trust proxy` set in app.ts, Express derives req.ip from the hop our own
+ * proxy appended, which a client cannot forge.
+ */
+const getClientIp = (req: Request): string => req.ip || req.socket.remoteAddress || "unknown";
 
 export const rateLimit = ({ scope, windowSeconds, max, message }: RateLimitOptions) => {
   return async (req: Request, res: Response, next: NextFunction) => {

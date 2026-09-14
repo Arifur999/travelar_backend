@@ -6,7 +6,12 @@ import AppError from "../../errorHelpers/AppError.js";
 import { auth } from "../../lib/auth.js";
 import { prisma } from "../../lib/prisma.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
-import { IChangePasswordPayload, ILoginPayload, IRegisterPayload } from "./auth.interface.js";
+import {
+  IChangePasswordPayload,
+  ILoginPayload,
+  IRegisterPayload,
+  IUpdateMePayload,
+} from "./auth.interface.js";
 
 /// Every feature is unlocked during the trial so a new agency can evaluate the
 /// whole product before choosing a plan.
@@ -85,6 +90,11 @@ const getMe = async (requestUser: IRequestUser) => {
   return user;
 };
 
+const updateMe = async (requestUser: IRequestUser, payload: IUpdateMePayload) => {
+  await prisma.user.update({ where: { id: requestUser.userId }, data: { name: payload.name } });
+  return getMe(requestUser);
+};
+
 /// Mirrors checkFeatureAccess so the UI and the API never disagree about what
 /// is unlocked. A lapsed trial reports no features even before the nightly job
 /// flips the status — the previous implementation reported the full set until
@@ -146,6 +156,7 @@ export const AuthService = {
   registerAgency,
   verifyCredentials,
   getMe,
+  updateMe,
   getMyFeatures,
   changePassword,
   revokeSession,
