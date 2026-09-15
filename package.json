@@ -8,17 +8,18 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "build": "tsc",
-    "generate": "prisma generate && node scripts/fix-esm-imports.mjs",
+    "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "deploy:migrate": "prisma migrate deploy",
     "studio": "prisma studio",
     "push": "prisma db push",
     "pull": "prisma db pull",
     "seed": "tsx src/app/utils/seed.ts",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint . --ext .ts && node scripts/check-esm-imports.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p tsconfig.test.json"
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "check:imports": "node scripts/check-esm-imports.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans": "^5.3.0",

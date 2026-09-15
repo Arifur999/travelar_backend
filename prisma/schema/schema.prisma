@@ -1,6 +1,10 @@
 generator client {
   provider = "prisma-client"
   output   = "../../src/generated/prisma"
+  // The app is ESM, where relative imports need an explicit extension. The
+  // generator writes them itself, so the client needs no post-processing.
+  moduleFormat        = "esm"
+  importFileExtension = "js"
 }
 
 datasource db {

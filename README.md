@@ -11,7 +11,7 @@ The frontend lives in [travelar](https://github.com/Arifur999/travelar).
 pnpm install
 cp .env.example .env          # then fill in the values
 docker compose up -d          # Postgres on host port 5433
-pnpm generate                 # prisma generate + ESM import fixup
+pnpm generate                 # prisma generate (client written with .js imports)
 pnpm migrate --name init      # apply migrations
 pnpm dev                      # API on http://localhost:5050
 ```
@@ -141,7 +141,7 @@ Sans + Noto Sans Bengali, so Bangla names and the `৳` sign print correctly.
 
 ## Conventions
 
-- **ESM**: every relative import ends in `.js`, even from a `.ts` file. `scripts/fix-esm-imports.mjs` fixes the generated Prisma client and runs as part of `pnpm generate`.
+- **ESM**: every relative import ends in `.js`, even from a `.ts` file. The Prisma generator emits them itself (`importFileExtension = "js"` in `schema.prisma`); `scripts/check-esm-imports.mjs` fails `pnpm lint` if any relative import lacks an extension, and never rewrites files.
 - Controllers are always `catchAsync` + `sendResponse`; services throw `AppError`.
 - List endpoints go through `QueryBuilder` — `?searchTerm=`, `?page=`, `?limit=`, `?sortBy=`, `?sortOrder=`, `?field[gte]=`, `?include=`. Searchable/filterable/include whitelists live in `<feature>.constant.ts`.
 - `app.set("query parser", qs.parse)` is mandatory or bracket range filters never parse.
@@ -151,7 +151,9 @@ Sans + Noto Sans Bengali, so Bangla names and the `৳` sign print correctly.
 | Script | Does |
 |---|---|
 | `pnpm dev` | tsx watch |
-| `pnpm generate` | prisma generate + ESM import fixup |
+| `pnpm generate` | prisma generate (the client is written with `.js` imports) |
 | `pnpm migrate` | prisma migrate dev |
 | `pnpm studio` | Prisma Studio |
-| `pnpm lint` | eslint |
+| `pnpm lint` | eslint, then the ESM import-extension check |
+| `pnpm test` | integration tests against a `_test` database (see TESTING.md) |
+| `pnpm typecheck` | tsc over src and test |
