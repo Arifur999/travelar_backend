@@ -48,6 +48,7 @@ model Agency {
   employeeTransactions EmployeeTransaction[]
   supportTickets       SupportTicket[]
   planHistories        PlanHistory[]
+  reminders            AgencyReminder[]
 
   @@index([planId])
   @@index([status])

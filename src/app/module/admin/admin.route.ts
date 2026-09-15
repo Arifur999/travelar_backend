@@ -13,6 +13,10 @@ router.use(checkAuth(Role.SUPER_ADMIN));
 router.get("/stats", AdminController.getPlatformStats);
 router.get("/activity-log", AdminController.listActivityLog);
 
+// Expire lapsed agencies and send due subscription emails now. The same pass
+// also runs hourly in-process and can be triggered from /internal.
+router.post("/jobs/subscription-lifecycle", AdminController.runSubscriptionLifecycle);
+
 router.get("/plans", AdminController.listPlans);
 router.post("/plans", validateRequest(AdminValidation.createPlanZodSchema), AdminController.createPlan);
 router.patch("/plans/:id", validateRequest(AdminValidation.updatePlanZodSchema), AdminController.updatePlan);

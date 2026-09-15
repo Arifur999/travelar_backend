@@ -4,6 +4,7 @@ import { env } from "./config/env.js";
 import { redisService } from "./app/lib/redis.js";
 import { seedSuperAdmin } from "./app/utils/seed.js";
 import { initErrorMonitoring } from "./app/lib/sentry.js";
+import { startScheduledJobs, stopScheduledJobs } from "./app/jobs/scheduler.js";
 
 let server: Server;
 
@@ -20,6 +21,8 @@ const bootstrap = async () => {
     server = app.listen(env.PORT, () => {
       console.log(`Server is running on http://localhost:${env.PORT}`);
     });
+
+    startScheduledJobs();
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
@@ -28,6 +31,7 @@ const bootstrap = async () => {
 
 const shutdown = (signal: string, exitCode: number) => {
   console.log(`${signal} received. Shutting down server...`);
+  stopScheduledJobs();
 
   if (!server) {
     process.exit(exitCode);

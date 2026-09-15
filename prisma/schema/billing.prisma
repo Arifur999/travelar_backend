@@ -55,3 +55,25 @@ model Payment {
   @@index([agencyId])
   @@map("subscription_payments")
 }
+
+/// A subscription email that went out, so the hourly lifecycle job never sends
+/// it twice. Keyed on the end date of the period it is about: a renewal moves
+/// that date, and the reminders for the new period are free to go out again.
+/// The row is written before the email is sent — the unique constraint is what
+/// stops two API instances running the job at once from both sending.
+model AgencyReminder {
+  id           String             @id @default(uuid(7))
+
+  agencyId     String
+  agency       Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  kind         AgencyReminderKind
+  periodEndsAt DateTime
+  recipients   Int                @default(0)
+
+  sentAt       DateTime           @default(now())
+
+  @@unique([agencyId, kind, periodEndsAt])
+  @@index([agencyId])
+  @@map("agency_reminders")
+}

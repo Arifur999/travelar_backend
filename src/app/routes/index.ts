@@ -13,6 +13,7 @@ import { DueReceivedRoutes } from "../module/dueReceived/dueReceived.route.js";
 import { EmployeeRoutes } from "../module/employee/employee.route.js";
 import { ExpenseRoutes } from "../module/expense/expense.route.js";
 import { HajjRoutes } from "../module/hajj/hajj.route.js";
+import { InternalRoutes } from "../module/internal/internal.route.js";
 import { RouteMasterRoutes } from "../module/routeMaster/routeMaster.route.js";
 import { SupplierRoutes } from "../module/supplier/supplier.route.js";
 import { SupplierTransactionRoutes } from "../module/supplierTransaction/supplierTransaction.route.js";
@@ -45,6 +46,9 @@ router.use("/billing", BillingRoutes);
 router.use("/admin", AdminRoutes);
 router.use("/admin", adminSupportRouter);
 router.use("/support", SupportRoutes);
+
+// Scheduler hooks — no session; a shared secret instead. 404 unless CRON_SECRET is set.
+router.use("/internal", InternalRoutes);
 
 // Public gateway callbacks — no session, called server-to-server.
 router.use("/billing", billingWebhookRouter);

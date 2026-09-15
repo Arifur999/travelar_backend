@@ -51,6 +51,26 @@ containers run as a non-root user and read all configuration at runtime.
 This is separate from `docker-compose.yaml`, which is only the local
 development database; the two use different project names, volumes and ports.
 
+## Scheduled jobs
+
+One job, **subscription lifecycle**, runs inside the API at five past every
+hour and once 15 s after boot:
+
+- agencies whose trial or paid period has ended move to `EXPIRED` (access was
+  already enforced from the dates; this keeps the console, filters and MRR true);
+- agency admins are emailed 3 days and 1 day before a trial ends, 7 days and 1
+  day before a subscription ends, and when it lapses. Only the most urgent due
+  reminder goes out, each once per period — recorded in `agency_reminders`
+  before sending, so several instances running it at once never double-send.
+  Agencies that lapsed more than 3 days before the job first sees them are
+  expired quietly, without an email.
+
+Run it on demand from the operator overview (**Run now**), or
+`POST /api/v1/admin/jobs/subscription-lifecycle`. Where the in-process
+schedule cannot run (serverless), set `JOBS_ENABLED=false` and `CRON_SECRET`,
+and have a scheduler call `POST /api/v1/internal/jobs/subscription-lifecycle`
+with header `x-cron-secret`. Without `CRON_SECRET` that route answers 404.
+
 ## Architecture
 
 Feature-first modules under `src/app/module/<feature>/`, one-way layering

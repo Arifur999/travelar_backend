@@ -45,6 +45,13 @@ const envSchema = z.object({
   SUPER_ADMIN_PASSWORD: z.string().min(8, "SUPER_ADMIN_PASSWORD must be at least 8 characters"),
 
   CRON_SECRET: z.string().default(""),
+  // In-process hourly jobs. Leave on for a single instance; set "false" where an
+  // external scheduler calls /api/v1/internal/jobs/* instead, or on extra
+  // instances (the jobs are safe to run twice, but there is no need).
+  JOBS_ENABLED: z
+    .string()
+    .default("true")
+    .transform((value) => value !== "false"),
   SENTRY_DSN: z.string().default(""),
 });
 

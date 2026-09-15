@@ -191,3 +191,12 @@ enum PlanHistoryAction {
   DOWNGRADED
   TRIAL_EXTENDED
 }
+
+/// Which subscription email an agency was sent. One of each per period end.
+enum AgencyReminderKind {
+  TRIAL_ENDING_3_DAYS
+  TRIAL_ENDING_1_DAY
+  SUBSCRIPTION_ENDING_7_DAYS
+  SUBSCRIPTION_ENDING_1_DAY
+  EXPIRED
+}

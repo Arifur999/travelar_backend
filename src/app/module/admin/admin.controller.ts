@@ -33,7 +33,6 @@ const deactivatePlan = catchAsync(async (req: Request, res: Response) => {
 /* ------------------------------- agencies ------------------------------- */
 
 const listAgencies = catchAsync(async (req: Request, res: Response) => {
-  await AdminService.syncExpiredAgencies();
   const result = await AdminService.listAgencies(req.query as IqueryParams);
 
   sendResponse(res, {
@@ -81,6 +80,11 @@ const getPlatformStats = catchAsync(async (req: Request, res: Response) => {
   ok(res, "Platform stats fetched successfully", result);
 });
 
+const runSubscriptionLifecycle = catchAsync(async (req: Request, res: Response) => {
+  const result = await AdminService.runSubscriptionLifecycle(req.user);
+  ok(res, "Subscription lifecycle ran", result);
+});
+
 const listActivityLog = catchAsync(async (req: Request, res: Response) => {
   const result = await AdminService.listActivityLog(req.query as IqueryParams);
 
@@ -105,5 +109,6 @@ export const AdminController = {
   extendTrial,
   deleteAgency,
   getPlatformStats,
+  runSubscriptionLifecycle,
   listActivityLog,
 };

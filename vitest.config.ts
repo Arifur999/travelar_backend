@@ -41,6 +41,10 @@ export default defineConfig({
       SSLCOMMERZ_STORE_ID: "",
       SSLCOMMERZ_STORE_PASSWORD: "",
       SENTRY_DSN: "",
+      // Enables /internal so its secret check can be tested. The in-process
+      // schedule never starts here anyway: tests import the app, not server.ts.
+      CRON_SECRET: "test-cron-secret-0123456789",
+      JOBS_ENABLED: "false",
     },
   },
 });

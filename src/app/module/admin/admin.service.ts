@@ -15,6 +15,7 @@ import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import { QueryBuilder } from "../../utils/QueryBuilder.js";
 import { PostingService } from "../cashAccount/posting.service.js";
 import { BillingService } from "../billing/billing.service.js";
+import { AgencyLifecycleService } from "../agency/agencyLifecycle.service.js";
 
 const toNumber = PostingService.toNumber;
 
@@ -128,6 +129,10 @@ const deactivatePlan = async (id: string, user: IRequestUser) => {
 /* ------------------------------- agencies ------------------------------- */
 
 const listAgencies = async (query: IqueryParams) => {
+  // Statuses are fixed before reading, so a status filter or badge is never
+  // stale between runs of the hourly lifecycle job.
+  await AgencyLifecycleService.expireLapsedAgencies();
+
   const queryBuilder = new QueryBuilder<
     Prisma.AgencyGetPayload<object>,
     Prisma.AgencyWhereInput,
@@ -151,6 +156,8 @@ const listAgencies = async (query: IqueryParams) => {
 };
 
 const getAgencyById = async (id: string) => {
+  await AgencyLifecycleService.expireLapsedAgencies();
+
   const agency = await prisma.agency.findFirst({
     where: { id, isDeleted: false },
     include: {
@@ -266,31 +273,8 @@ const deleteAgency = async (id: string, user: IRequestUser) => {
 
 /* -------------------------------- stats --------------------------------- */
 
-/**
- * Flips agencies whose trial or subscription has run out.
- *
- * Called before the platform lists so the numbers are never stale, and this is
- * where the nightly job would also land.
- */
-const syncExpiredAgencies = async () => {
-  const now = new Date();
-
-  const result = await prisma.agency.updateMany({
-    where: {
-      isDeleted: false,
-      OR: [
-        { status: AgencyStatus.TRIAL, trialEndsAt: { lt: now } },
-        { status: AgencyStatus.ACTIVE, subscriptionEndsAt: { lt: now } },
-      ],
-    },
-    data: { status: AgencyStatus.EXPIRED },
-  });
-
-  return result.count;
-};
-
 const getPlatformStats = async () => {
-  await syncExpiredAgencies();
+  await AgencyLifecycleService.expireLapsedAgencies();
 
   const soon = addDays(new Date(), 7);
 
@@ -358,6 +342,19 @@ const listActivityLog = async (query: IqueryParams) => {
     .execute();
 };
 
+/* ---------------------------------- jobs --------------------------------- */
+
+/** Runs the subscription lifecycle now, instead of waiting for the hour. */
+const runSubscriptionLifecycle = async (user: IRequestUser) => {
+  const summary = await AgencyLifecycleService.runSubscriptionLifecycle();
+  await logActivity(user.userId, "lifecycle_run", "Platform", null, {
+    expired: summary.expired,
+    reminders: summary.reminders,
+    emails: summary.emails,
+  });
+  return summary;
+};
+
 export const AdminService = {
   createPlan,
   listPlans,
@@ -369,7 +366,7 @@ export const AdminService = {
   assignPlan,
   extendTrial,
   deleteAgency,
-  syncExpiredAgencies,
   getPlatformStats,
+  runSubscriptionLifecycle,
   listActivityLog,
 };
