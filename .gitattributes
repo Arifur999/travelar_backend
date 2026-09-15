@@ -1,0 +1,3 @@
+# Shell scripts run inside Linux containers: CRLF endings ("/bin/sh^M") break
+# them, and core.autocrlf would otherwise check them out that way on Windows.
+*.sh text eol=lf

@@ -65,6 +65,28 @@ services:
       timeout: 5s
       retries: 20
 
+  # Nightly pg_dump into BACKUP_DIR on the host (default ./backups), plus one at
+  # start. Copy that folder off this machine — a backup on the same disk as the
+  # database does not survive losing the disk. Restore steps: ops/backup/README.md.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/ops/entrypoint.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-travelar}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-travelar}
+      BACKUP_DIR: /backups
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 21 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./ops/backup:/ops:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
   # Runs once per `up`, applies pending migrations, exits. The API waits for it
   # to finish successfully, so it never starts against an old schema.
   migrate:

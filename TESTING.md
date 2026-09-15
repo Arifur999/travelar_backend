@@ -64,6 +64,7 @@ case the in-memory limiter exists for.
 | `money.test.ts` | ledger balance; exact reversal; transfers net to zero and cannot overdraw; over-payment guards; supplier payable; split-tender collections; the customer statement ends on `currentDue` |
 | `invoice.test.ts` | PDFs for all three modules, embedded Unicode fonts, multi-page, JSON errors |
 | `subscriptionLifecycle.test.ts` | trial and subscription reminders reach active admins only, once per period, most urgent only; renewal re-arms; expiry flips status and emails once; long-lapsed agencies expired quietly; suspended skipped; operator and cron-secret triggers |
+| `securityHeaders.test.ts` | helmet headers on JSON successes, errors and 404s; no X-Powered-By; PDFs unaffected |
 | `rateLimit.test.ts` | per-address and per-account limits, without Redis |
 
 Several of these are regression tests for real bugs — each says which in a

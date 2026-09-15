@@ -48,6 +48,13 @@ containers run as a non-root user and read all configuration at runtime.
   per-IP limit on it. Sign-in attempts are also capped per account, which a
   forged address does not get around.
 
+- **Backups.** A `backup` service dumps the database at start and nightly into
+  `BACKUP_DIR` (default `./backups`, 14 days kept). Copy that folder off the
+  machine. Restoring is documented, and rehearsed, in `ops/backup/README.md`.
+- **Security headers.** The API sends a no-content CSP, `nosniff`, HSTS and
+  no `X-Powered-By` (helmet); the web app sends a per-request nonce CSP and
+  framing protection.
+
 This is separate from `docker-compose.yaml`, which is only the local
 development database; the two use different project names, volumes and ports.
 

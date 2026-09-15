@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { Application, Request, Response } from "express";
+import helmet from "helmet";
 import path from "path";
 import qs from "qs";
 import { env } from "./config/env.js";
@@ -25,6 +26,28 @@ app.set("views", path.resolve(process.cwd(), "src/app/templates"));
 // too: logins arrive from it, not from the browser, so it forwards the
 // client's address in X-Forwarded-For and this setting makes req.ip read it.
 app.set("trust proxy", 1);
+
+// Security headers. This API answers JSON and PDFs and never serves a page, so
+// the policy allows nothing to load and nothing to frame it. It also removes
+// "X-Powered-By: Express".
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
+    // Only this API's own site (the web app) may embed its responses, e.g. a PDF.
+    crossOriginResourcePolicy: { policy: "same-site" },
+    // Ignored by browsers over plain http; refuses downgrades once behind TLS.
+    strictTransportSecurity: { maxAge: 31_536_000, includeSubDomains: false },
+    referrerPolicy: { policy: "no-referrer" },
+  }),
+);
 
 app.use(
   cors({
