@@ -58,6 +58,7 @@ case the in-memory limiter exists for.
 | File | Guards |
 |---|---|
 | `auth.test.ts` | better-auth's own routes closed; role/tenant cannot be smuggled in; email case; session + token both required; logout; change password |
+| `passwordReset.test.ts` | the emailed link works once and expires; unknown and blocked accounts get the same answer and no email; per-address request limit; sessions revoked; temporary password cleared |
 | `tenancy.test.ts` | another agency gets 404 on every record and invoice; platform/agency boundary; suspended = read-only; plan gates; deleted agency locked out |
 | `team.test.ts` | owner / admin / staff rules; sessions revoked on demote, block, reset, remove; lapsed agency can still lock someone out; agency profile |
 | `money.test.ts` | ledger balance; exact reversal; transfers net to zero and cannot overdraw; over-payment guards; supplier payable; split-tender collections; the customer statement ends on `currentDue` |

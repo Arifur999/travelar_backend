@@ -16,6 +16,15 @@ export interface IChangePasswordPayload {
   newPassword: string;
 }
 
+export interface IForgotPasswordPayload {
+  email: string;
+}
+
+export interface IResetPasswordPayload {
+  token: string;
+  newPassword: string;
+}
+
 export interface IUpdateMePayload {
   name: string;
 }

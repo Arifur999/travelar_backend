@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { checkAuth } from "../../middleware/checkAuth.js";
-import { authRateLimiter, loginAccountRateLimiter } from "../../middleware/rateLimiter.js";
+import {
+  authRateLimiter,
+  loginAccountRateLimiter,
+  passwordResetAccountRateLimiter,
+} from "../../middleware/rateLimiter.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthValidation } from "./auth.validation.js";
@@ -17,6 +21,22 @@ router.post(
   AuthController.login,
 );
 router.post("/refresh-token", AuthController.getNewToken);
+
+// Public password recovery. The per-account limit on requests stops this from
+// being used to flood someone's inbox; reset attempts share the auth limit.
+router.post(
+  "/forgot-password",
+  authRateLimiter,
+  passwordResetAccountRateLimiter,
+  validateRequest(AuthValidation.forgotPasswordZodSchema),
+  AuthController.forgotPassword,
+);
+router.post(
+  "/reset-password",
+  authRateLimiter,
+  validateRequest(AuthValidation.resetPasswordZodSchema),
+  AuthController.resetPassword,
+);
 
 // Authenticated, any role.
 router.get("/me", checkAuth(), AuthController.getMe);

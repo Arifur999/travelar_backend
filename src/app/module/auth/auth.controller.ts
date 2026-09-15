@@ -200,6 +200,28 @@ const changePassword = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const forgotPassword = catchAsync(async (req: Request, res: Response) => {
+  const result = await AuthService.requestPasswordReset(req.body);
+
+  sendResponse(res, {
+    httpStatus: status.OK,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
+const resetPassword = catchAsync(async (req: Request, res: Response) => {
+  const result = await AuthService.resetPassword(req.body);
+
+  sendResponse(res, {
+    httpStatus: status.OK,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
 const logout = catchAsync(async (req: Request, res: Response) => {
   const sessionToken = cookieUtils.getCookie(req, "better-auth.session_token");
   if (sessionToken) {
@@ -224,6 +246,8 @@ export const AuthController = {
   getMyFeatures,
   getNewToken,
   changePassword,
+  forgotPassword,
+  resetPassword,
   logout,
 };
 

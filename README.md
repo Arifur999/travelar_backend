@@ -95,7 +95,7 @@ All mounted under `/api/v1`. Deletes and reversals of posted money are
 
 | Mount | What it does | Plan feature |
 |---|---|---|
-| `/auth` | Register an agency, login, refresh, `me`, change password | — |
+| `/auth` | Register an agency, login, refresh, `me`, change password, forgot / reset password by email | — |
 | `/agency`, `/team` | Agency profile; team members, roles, blocking, password resets | — |
 | `/customers`, `/due-received` | Customers with derived due and a full statement; collections with split tender | — |
 | `/ticketing`, `/airlines`, `/routes-master` | Ticket sales, payments, date changes, refunds, **PDF invoice** | `TICKETING` |

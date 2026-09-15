@@ -111,6 +111,22 @@ export const loginAccountRateLimiter = rateLimit({
   },
 });
 
+/**
+ * Reset emails per address, whoever asks. Without it anyone could send a
+ * victim an endless stream of reset emails. Every address gets the same 429
+ * once over the limit, existing account or not, so it reveals nothing.
+ */
+export const passwordResetAccountRateLimiter = rateLimit({
+  scope: "password-reset-account",
+  windowSeconds: 60 * 60,
+  max: 3,
+  message: "Too many reset requests for this email. Please wait an hour and try again.",
+  keyBy: (req) => {
+    const email = (req.body as { email?: unknown } | undefined)?.email;
+    return typeof email === "string" && email.trim() ? email.trim().toLowerCase() : undefined;
+  },
+});
+
 export const publicSubmitRateLimiter = rateLimit({
   scope: "public-submit",
   windowSeconds: 60 * 60,

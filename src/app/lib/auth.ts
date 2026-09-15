@@ -3,6 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { bearer } from "better-auth/plugins";
 import { env } from "../../config/env.js";
 import { Role, UserStatus } from "../../generated/prisma/enums.js";
+import { queuePasswordResetEmail, RESET_TOKEN_TTL_SECONDS } from "../utils/passwordResetEmail.js";
 import { prisma } from "./prisma.js";
 
 export const auth = betterAuth({
@@ -17,6 +18,18 @@ export const auth = betterAuth({
     // email verification is enforced at the product level later, not at signup.
     requireEmailVerification: false,
     minPasswordLength: 8,
+    // Password reset, called in-process from POST /api/v1/auth/forgot-password
+    // and /reset-password. better-auth owns the token: single use, consumed
+    // atomically, rejected once past this lifetime.
+    resetPasswordTokenExpiresIn: RESET_TOKEN_TTL_SECONDS,
+    sendResetPassword: async ({ user, token }) => queuePasswordResetEmail(user, token),
+    // Whoever had the old password is signed out everywhere.
+    revokeSessionsOnPasswordReset: true,
+    // The user chose this password themselves, so a temporary one set by an
+    // admin no longer needs replacing.
+    onPasswordReset: async ({ user }) => {
+      await prisma.user.update({ where: { id: user.id }, data: { needPasswordChange: false } });
+    },
   },
 
   // Extra columns on User that better-auth must know how to write. agencyId is

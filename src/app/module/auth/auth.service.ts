@@ -3,13 +3,16 @@ import { addDays } from "date-fns";
 import { env } from "../../../config/env.js";
 import { AgencyStatus, Role, UserStatus } from "../../../generated/prisma/enums.js";
 import AppError from "../../errorHelpers/AppError.js";
+import { APIError } from "better-auth/api";
 import { auth } from "../../lib/auth.js";
 import { prisma } from "../../lib/prisma.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import {
   IChangePasswordPayload,
+  IForgotPasswordPayload,
   ILoginPayload,
   IRegisterPayload,
+  IResetPasswordPayload,
   IUpdateMePayload,
 } from "./auth.interface.js";
 
@@ -148,6 +151,30 @@ const changePassword = async (requestUser: IRequestUser, payload: IChangePasswor
   return { message: "Password changed successfully" };
 };
 
+/**
+ * Always answers the same way. Whether an account exists, is blocked, or was
+ * deleted must not be learnable from this endpoint; better-auth also fakes the
+ * lookup work for unknown addresses so timing does not tell either.
+ */
+const requestPasswordReset = async (payload: IForgotPasswordPayload) => {
+  await auth.api.requestPasswordReset({ body: { email: payload.email } });
+  return { message: "If an account exists for that email, a link to reset the password is on its way." };
+};
+
+const resetPassword = async (payload: IResetPasswordPayload) => {
+  try {
+    await auth.api.resetPassword({ body: { token: payload.token, newPassword: payload.newPassword } });
+  } catch (error) {
+    // Unknown, already used and expired tokens all look the same to the user:
+    // the link no longer works and they need a new one.
+    if (error instanceof APIError) {
+      throw new AppError(status.BAD_REQUEST, "This reset link is invalid or has expired. Request a new one.");
+    }
+    throw error;
+  }
+  return { message: "Password reset. Sign in with your new password." };
+};
+
 const revokeSession = async (sessionToken: string) => {
   await prisma.session.deleteMany({ where: { token: sessionToken } });
 };
@@ -159,5 +186,7 @@ export const AuthService = {
   updateMe,
   getMyFeatures,
   changePassword,
+  requestPasswordReset,
+  resetPassword,
   revokeSession,
 };
