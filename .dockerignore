@@ -17,3 +17,9 @@ uploads
 *-debug.log*
 *.log
 docs
+
+# Test-only; never part of the image.
+test
+vitest.config.ts
+tsconfig.test.json
+.github

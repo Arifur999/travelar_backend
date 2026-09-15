@@ -3,7 +3,7 @@ import { startTestApp, type Session, type TestApp } from "./helpers/app.js";
 
 /**
  * The money model's invariants, checked end to end:
- *   balance  = opening + Σ in − Σ out, from one posting ledger
+ *   balance  = Σ in − Σ out, from one posting ledger (the opening balance is a posting)
  *   payable  = opening + Σ purchases − Σ payments
  *   due      = opening + Σ sales − Σ collections − Σ discounts
  * and every posting reverses exactly.
@@ -25,7 +25,7 @@ beforeAll(async () => {
 afterAll(() => t.close());
 
 describe("cash accounts", () => {
-  it("balance is opening + money in − money out, and a reversal restores it exactly", async () => {
+  it("balance is money in − money out, and a reversal restores it exactly", async () => {
     const account = await newAccount("Front desk", 10_000);
     const customer = await newCustomer();
     const ticket = await t.api.ok(
@@ -37,7 +37,10 @@ describe("cash accounts", () => {
 
     await t.api.ok("POST", `/ticketing/${ticket.id}/payments`, { cashAccountId: account.id, amount: 3000 }, owner);
     const after = await t.api.ok("GET", `/accounts/${account.id}`, undefined, owner);
-    expect(after).toMatchObject({ openingBalance: 10_000, totalIn: 3000, totalOut: 0, currentBalance: 13_000 });
+    // The opening balance is itself an IN posting (source OPENING), so the
+    // ledger alone explains the figure: 10,000 opening + 3,000 payment.
+    expect(after).toMatchObject({ openingBalance: 10_000, totalIn: 13_000, totalOut: 0, currentBalance: 13_000 });
+    expect(after.currentBalance).toBe(after.totalIn - after.totalOut);
 
     const detail = await t.api.ok("GET", `/ticketing/${ticket.id}`, undefined, owner);
     const paymentId = detail.payments[0].id;

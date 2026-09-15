@@ -14,6 +14,13 @@ export default defineConfig(
     },
   },
   {
+    // Integration tests read JSON response bodies whose shape is the thing
+    // under test; typing every one of them up front would only restate the
+    // assertions.
+    files: ["test/**/*.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+  {
     // Build-time Node scripts, plain ESM rather than TypeScript.
     files: ["scripts/**/*.mjs"],
     languageOptions: { globals: { console: "readonly", process: "readonly" } },

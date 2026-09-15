@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint, typecheck, integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # The suite creates this database and refuses any name not ending in _test.
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/travelar_test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Reads the version from package.json#packageManager.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # prisma.config.ts reads DATABASE_URL even though generate never connects.
+      - run: pnpm generate
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  docker:
+    name: Production image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: travelar-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
