@@ -125,6 +125,8 @@ services:
       # mismatch silently bounces every protected page to /login).
       JWT_ACCESS_SECRET: ${ACCESS_TOKEN_SECRET:?set ACCESS_TOKEN_SECRET}
       NEXT_PUBLIC_SITE_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+      # Both tiers read the same knob, so one setting changes both logs.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       api:
         condition: service_healthy
