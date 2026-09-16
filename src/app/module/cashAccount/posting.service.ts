@@ -3,6 +3,7 @@ import { Prisma } from "../../../generated/prisma/client.js";
 import { PostingDirection, PostingSource } from "../../../generated/prisma/enums.js";
 import AppError from "../../errorHelpers/AppError.js";
 import { prisma } from "../../lib/prisma.js";
+import { lockRow } from "../../utils/rowLock.js";
 
 /// Prisma's transaction client, so callers can post inside their own transaction.
 type Tx = Prisma.TransactionClient;
@@ -97,14 +98,23 @@ const reverse = async (client: Tx, source: PostingSource, sourceId: string) =>
  * silently drifted apart by the value of every supplier payment and staff
  * payout ever made.
  */
-const getBalances = async (agencyId: string, cashAccountIds?: string[]): Promise<IAccountBalance[]> => {
+const getBalances = async (
+  agencyId: string,
+  cashAccountIds?: string[],
+  /**
+   * Defaults to the shared client. Pass the caller's transaction client when
+   * the answer is about to be used as a guard — on its own connection this
+   * cannot see that transaction's own uncommitted postings.
+   */
+  client: Tx = prisma,
+): Promise<IAccountBalance[]> => {
   const where: Prisma.CashAccountWhereInput = { agencyId, isDeleted: false };
   if (cashAccountIds) where.id = { in: cashAccountIds };
 
-  const accounts = await prisma.cashAccount.findMany({ where, orderBy: { createdAt: "asc" } });
+  const accounts = await client.cashAccount.findMany({ where, orderBy: { createdAt: "asc" } });
   if (accounts.length === 0) return [];
 
-  const grouped = await prisma.accountPosting.groupBy({
+  const grouped = await client.accountPosting.groupBy({
     by: ["cashAccountId", "direction"],
     where: { agencyId, cashAccountId: { in: accounts.map((a) => a.id) } },
     _sum: { amount: true },
@@ -136,8 +146,8 @@ const getBalances = async (agencyId: string, cashAccountIds?: string[]): Promise
 };
 
 /** Balance of one account, for guards. */
-const getBalance = async (agencyId: string, cashAccountId: string) => {
-  const [result] = await getBalances(agencyId, [cashAccountId]);
+const getBalance = async (agencyId: string, cashAccountId: string, client: Tx = prisma) => {
+  const [result] = await getBalances(agencyId, [cashAccountId], client);
   if (!result) throw new AppError(status.NOT_FOUND, "Cash account not found");
   return result;
 };
@@ -170,9 +180,23 @@ const getBreakdown = async (agencyId: string) => {
  * Applied only where the business actually wants it — a transfer between the
  * agency's own accounts. Expenses, supplier payments and payouts are allowed to
  * go negative, matching how the agency already works on paper.
+ *
+ * MUST be called inside the transaction that writes the postings, and it takes
+ * a row lock on the account to make that meaningful. It used to run before the
+ * transaction opened, on its own connection, so five simultaneous transfers of
+ * 400 from a 1,000 account all read 1,000, all passed, and all committed —
+ * leaving it at −1,000. Read-then-write across two connections is not a guard.
+ *
+ * Every writer that checks a balance locks the source account and only the
+ * source account, so concurrent transfers queue behind each other and two
+ * transfers in opposite directions cannot deadlock.
  */
-const assertSufficientBalance = async (agencyId: string, cashAccountId: string, amount: number) => {
-  const { currentBalance, name } = await getBalance(agencyId, cashAccountId);
+const assertSufficientBalance = async (client: Tx, agencyId: string, cashAccountId: string, amount: number) => {
+  // A second transfer out of this account waits here until the first has
+  // committed, so the sum below includes it.
+  await lockRow(client, "cashAccount", cashAccountId, agencyId);
+
+  const { currentBalance, name } = await getBalance(agencyId, cashAccountId, client);
   if (currentBalance < amount) {
     throw new AppError(
       status.BAD_REQUEST,

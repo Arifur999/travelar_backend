@@ -77,6 +77,32 @@ describe("balance transfers", () => {
     expect(await balanceOf(from.id)).toBe(1000);
     expect(await balanceOf(to.id)).toBe(0);
   });
+
+  /**
+   * Regression: the guard used to run before the transaction opened, reading
+   * the balance on its own connection. Five simultaneous transfers therefore
+   * all saw the full 1,000, all passed, and all committed — overdrawing the
+   * account to −1,000, the one thing this module promises cannot happen.
+   */
+  it("cannot be overdrawn by simultaneous transfers", async () => {
+    const from = await newAccount("Race source", 1000);
+    const to = await newAccount("Race sink", 0);
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        t.api.post("/balance-transfers", { fromAccountId: from.id, toAccountId: to.id, amount: 400 }, owner),
+      ),
+    );
+
+    const accepted = results.filter((r) => r.status < 300).length;
+    const refused = results.filter((r) => r.status === 400).length;
+
+    // 400 each out of 1,000: exactly two can be afforded, whichever win.
+    expect(accepted).toBe(2);
+    expect(refused).toBe(3);
+    expect(await balanceOf(from.id)).toBe(200);
+    expect(await balanceOf(to.id)).toBe(800);
+  });
 });
 
 describe("over-payment guards", () => {
@@ -97,6 +123,80 @@ describe("over-payment guards", () => {
     const visa = await t.api.ok("POST", "/visa", { customerId: customer.id, country: "Japan", visaType: "Tourist", serviceFee: 2000, embassyFee: 3000 }, owner);
     expect((await t.api.post(`/visa/${visa.id}/payments`, { cashAccountId: account.id, amount: 5000.01 }, owner)).status).toBe(400);
     expect((await t.api.post(`/visa/${visa.id}/payments`, { cashAccountId: account.id, amount: 5000 }, owner)).status).toBe(201);
+  });
+
+  /**
+   * Regression: these guards summed the payments so far inside the transaction,
+   * but nothing locked the ticket, so under READ COMMITTED every simultaneous
+   * payment read the same total, every one passed, and every one committed. A
+   * 1,000 ticket took 2,000 in payments.
+   */
+  it("a ticket cannot be overpaid by simultaneous payments", async () => {
+    const account = await newAccount("Race ticket", 0);
+    const customer = await newCustomer();
+    const ticket = await t.api.ok(
+      "POST",
+      "/ticketing",
+      { customerId: customer.id, passengerName: "Pax Race", pnr: "RACE01", fare: 1000, cost: 800 },
+      owner,
+    );
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        t.api.post(`/ticketing/${ticket.id}/payments`, { cashAccountId: account.id, amount: 400 }, owner),
+      ),
+    );
+
+    expect(results.filter((r) => r.status < 300).length).toBe(2);
+    expect(await balanceOf(account.id)).toBe(800);
+    expect((await t.api.ok("GET", `/ticketing/${ticket.id}`, undefined, owner)).totalPaid).toBe(800);
+  });
+
+  it("a visa case cannot be overpaid by simultaneous payments", async () => {
+    const account = await newAccount("Race visa", 0);
+    const customer = await newCustomer();
+    const visa = await t.api.ok(
+      "POST",
+      "/visa",
+      { customerId: customer.id, country: "Japan", visaType: "Tourist", serviceFee: 600, embassyFee: 400 },
+      owner,
+    );
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        t.api.post(`/visa/${visa.id}/payments`, { cashAccountId: account.id, amount: 400 }, owner),
+      ),
+    );
+
+    expect(results.filter((r) => r.status < 300).length).toBe(2);
+    expect(await balanceOf(account.id)).toBe(800);
+  });
+
+  it("a hajj booking cannot be overpaid by simultaneous payments", async () => {
+    const account = await newAccount("Race hajj", 0);
+    const customer = await newCustomer();
+    const pkg = await t.api.ok("POST", "/hajj/packages", { name: "Umrah Race", type: "UMRAH", price: 1000 }, owner);
+    const batch = await t.api.ok(
+      "POST",
+      "/hajj/batches",
+      { packageId: pkg.id, name: "Race batch", departureDate: "2027-03-01", seatCapacity: 10 },
+      owner,
+    );
+    const booking = await t.api.ok(
+      "POST",
+      "/hajj/bookings",
+      { customerId: customer.id, packageId: pkg.id, batchId: batch.id, pilgrimName: "Pax Race" },
+      owner,
+    );
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        t.api.post(`/hajj/bookings/${booking.id}/payments`, { cashAccountId: account.id, amount: 400 }, owner),
+      ),
+    );
+
+    expect(results.filter((r) => r.status < 300).length).toBe(2);
+    expect(await balanceOf(account.id)).toBe(800);
   });
 });
 

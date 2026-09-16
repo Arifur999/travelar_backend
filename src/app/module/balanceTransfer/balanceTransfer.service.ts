@@ -25,6 +25,10 @@ import {
  * supplier payments and payouts deliberately allow an account to go negative
  * because that reflects how the agency already works on paper; moving money you
  * do not have between your own accounts is always a mistake.
+ *
+ * The guard runs inside the transaction and locks the source account — see
+ * PostingService.assertSufficientBalance for why checking it beforehand was
+ * not a guard at all.
  */
 const createBalanceTransfer = async (
   agencyId: string,
@@ -35,13 +39,15 @@ const createBalanceTransfer = async (
     throw new AppError(status.BAD_REQUEST, "Source and destination account cannot be the same");
   }
 
-  // Checked before the transaction opens, so a plain overdraft does not hold
-  // write locks on two accounts while we decide.
-  await PostingService.assertSufficientBalance(agencyId, payload.fromAccountId, payload.amount);
-
   const date = payload.date ? new Date(payload.date) : new Date();
 
   return prisma.$transaction(async (tx) => {
+    // First statement in the transaction: it locks the source account, so
+    // simultaneous transfers out of it queue up instead of each reading the
+    // same balance and all being allowed. Only the source is locked, so a pair
+    // of transfers in opposite directions cannot deadlock.
+    await PostingService.assertSufficientBalance(tx, agencyId, payload.fromAccountId, payload.amount);
+
     await PostingService.assertPostableAccount(tx, agencyId, payload.fromAccountId);
     await PostingService.assertPostableAccount(tx, agencyId, payload.toAccountId);
 

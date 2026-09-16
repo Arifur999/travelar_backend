@@ -61,12 +61,13 @@ case the in-memory limiter exists for.
 | `passwordReset.test.ts` | the emailed link works once and expires; unknown and blocked accounts get the same answer and no email; per-address request limit; sessions revoked; temporary password cleared |
 | `tenancy.test.ts` | another agency gets 404 on every record and invoice; platform/agency boundary; suspended = read-only; plan gates; deleted agency locked out |
 | `team.test.ts` | owner / admin / staff rules; sessions revoked on demote, block, reset, remove; lapsed agency can still lock someone out; agency profile |
-| `money.test.ts` | ledger balance; exact reversal; transfers net to zero and cannot overdraw; over-payment guards; supplier payable; split-tender collections; the customer statement ends on `currentDue` |
+| `money.test.ts` | ledger balance; exact reversal; transfers net to zero and cannot overdraw; over-payment guards; supplier payable; split-tender collections; the customer statement ends on `currentDue`; and no amount of simultaneous requests can overdraw an account or overpay a ticket, visa case or booking |
 | `invoice.test.ts` | PDFs for all three modules, embedded Unicode fonts, multi-page, JSON errors |
 | `subscriptionLifecycle.test.ts` | trial and subscription reminders reach active admins only, once per period, most urgent only; renewal re-arms; expiry flips status and emails once; long-lapsed agencies expired quietly; suspended skipped; operator and cron-secret triggers |
 | `securityHeaders.test.ts` | helmet headers on JSON successes, errors and 404s; no X-Powered-By; PDFs unaffected |
 | `queryCount.test.ts` | list endpoints cost the same number of database queries for 5 rows as for 30 (counted at the pg driver), and the batched per-row figures are right |
 | `rateLimit.test.ts` | per-address and per-account limits, without Redis |
+| `rowLock.test.ts` | Every table `lockRow` names as a string really exists with the columns its FOR UPDATE query uses — a schema rename would otherwise disable the concurrency guards silently |
 | `observability.test.ts` | every response carries `x-request-id`; a caller's trace id continues, a made-up one is replaced; error bodies repeat the id; access lines record user and agency but never the query string |
 
 Several of these are regression tests for real bugs — each says which in a

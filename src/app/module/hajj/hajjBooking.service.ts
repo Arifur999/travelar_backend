@@ -14,6 +14,7 @@ import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import { QueryBuilder } from "../../utils/QueryBuilder.js";
 import { PostingService } from "../cashAccount/posting.service.js";
 import { LIVE_BOOKING } from "./hajj.service.js";
+import { lockRow } from "../../utils/rowLock.js";
 import {
   HAJJ_BOOKING_TRANSITIONS,
   getHajjDocumentPreset,
@@ -328,14 +329,19 @@ const recordPayment = async (
   payload: IRecordHajjPaymentPayload,
   user: IRequestUser,
 ) => {
-  const booking = await prisma.hajjBooking.findFirst({
-    where: { id: bookingId, agencyId, isDeleted: false },
-  });
-  if (!booking) throw new AppError(status.NOT_FOUND, "Booking not found");
-
   const paidAt = payload.paidAt ? new Date(payload.paidAt) : new Date();
 
   await prisma.$transaction(async (tx) => {
+    // First, so simultaneous payments for this booking queue instead of each
+    // summing the same total and all being allowed through. See rowLock.ts.
+    await lockRow(tx, "hajjBooking", bookingId, agencyId);
+
+    // Re-read under the lock: the package price must be the committed one, not
+    // a snapshot taken before the transaction opened.
+    const booking = await tx.hajjBooking.findFirstOrThrow({
+      where: { id: bookingId, agencyId, isDeleted: false },
+    });
+
     await PostingService.assertPostableAccount(tx, agencyId, payload.cashAccountId);
 
     const agg = await tx.hajjPayment.aggregate({

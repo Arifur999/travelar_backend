@@ -167,6 +167,15 @@ Sans + Noto Sans Bengali, so Bangla names and the `৳` sign print correctly.
 - Controllers are always `catchAsync` + `sendResponse`; services throw `AppError`.
 - List endpoints go through `QueryBuilder` — `?searchTerm=`, `?page=`, `?limit=`, `?sortBy=`, `?sortOrder=`, `?field[gte]=`, `?include=`. Searchable/filterable/include whitelists live in `<feature>.constant.ts`.
 - `app.set("query parser", qs.parse)` is mandatory or bracket range filters never parse.
+- **A guard that sums rows and then decides must hold a row lock.** Reading inside
+  the transaction is not enough: under READ COMMITTED two concurrent transactions
+  both see the world as it was before either started, and inserts do not conflict.
+  Call `lockRow(tx, <parent>, id, agencyId)` as the transaction's first statement —
+  the source account for a transfer, the ticket/case/booking for a payment — then
+  re-read the parent through `tx` so the figures are the committed ones. Every
+  writer takes **at most one** row lock, always the row its guard is about, so
+  nothing holds one while waiting for another and none of this can deadlock. A
+  second lock would need a global ordering; don't add one casually.
 
 ## Scripts
 

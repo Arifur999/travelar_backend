@@ -11,6 +11,7 @@ import { IqueryParams } from "../../interfaces/query.interface.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import { QueryBuilder } from "../../utils/QueryBuilder.js";
 import { PostingService } from "../cashAccount/posting.service.js";
+import { lockRow } from "../../utils/rowLock.js";
 import {
   TICKET_TRANSITIONS,
   ticketFilterableFields,
@@ -377,12 +378,17 @@ const recordPayment = async (
   payload: IRecordTicketPaymentPayload,
   user: IRequestUser,
 ) => {
-  const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, agencyId, isDeleted: false } });
-  if (!ticket) throw new AppError(status.NOT_FOUND, "Ticket not found");
-
   const paidAt = payload.paidAt ? new Date(payload.paidAt) : new Date();
 
   await prisma.$transaction(async (tx) => {
+    // First, so simultaneous payments for this ticket queue instead of each
+    // summing the same total and all being allowed through. See rowLock.ts.
+    await lockRow(tx, "ticket", ticketId, agencyId);
+
+    // Re-read under the lock: the fare and any date-change fees must be the
+    // committed ones, not a snapshot taken before the transaction opened.
+    const ticket = await tx.ticket.findFirstOrThrow({ where: { id: ticketId, agencyId, isDeleted: false } });
+
     await PostingService.assertPostableAccount(tx, agencyId, payload.cashAccountId);
 
     const agg = await tx.ticketPayment.aggregate({
