@@ -4,6 +4,7 @@ import path from "path";
 import status from "http-status";
 import AppError from "../errorHelpers/AppError.js";
 import { env } from "../../config/env.js";
+import { logger } from "../lib/logger.js";
 
 export interface IOutboundEmail {
   to: string;
@@ -74,13 +75,13 @@ export const sendEmail = async ({ to, subject, templateName, templateData, text,
     });
 
     if (!env.EMAIL_SENDER.SMTP_HOST) {
-      console.log(`[email not sent — SMTP_HOST is unset] to=${to} subject="${subject}"\n${text ?? "(html only)"}`);
+      logger.warn("email not sent: SMTP_HOST is unset", { to, subject, body: text ?? "(html only)" });
       return;
     }
 
-    console.log(`Email sent to ${to} : ${info.messageId}`);
+    logger.info("email sent", { to, subject, messageId: info.messageId });
   } catch (error) {
-    console.error("Failed to send email:", error);
+    logger.error("email failed", { to, subject, err: error });
     throw new AppError(status.INTERNAL_SERVER_ERROR, "Failed to send email");
   }
 };

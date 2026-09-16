@@ -7,6 +7,7 @@ import qs from "qs";
 import { env } from "./config/env.js";
 import { prisma } from "./app/lib/prisma.js";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler.js";
+import { requestLogger } from "./app/middleware/requestLogger.js";
 import notFound from "./app/middleware/notFound.js";
 import { indexRoute } from "./app/routes/index.js";
 
@@ -26,6 +27,10 @@ app.set("views", path.resolve(process.cwd(), "src/app/templates"));
 // too: logins arrive from it, not from the browser, so it forwards the
 // client's address in X-Forwarded-For and this setting makes req.ip read it.
 app.set("trust proxy", 1);
+
+// First, so every request — including one refused by CORS or a rate limit —
+// gets an id and an access log line.
+app.use(requestLogger);
 
 // Security headers. This API answers JSON and PDFs and never serves a page, so
 // the policy allows nothing to load and nothing to frame it. It also removes

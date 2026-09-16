@@ -2,6 +2,7 @@ import { UserStatus } from "../../generated/prisma/enums.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../lib/prisma.js";
 import { sendEmail } from "./email.js";
+import { logger } from "../lib/logger.js";
 
 /** How long a reset link lives. better-auth enforces it when the token is used. */
 export const RESET_TOKEN_TTL_SECONDS = 60 * 60;
@@ -46,5 +47,5 @@ export const queuePasswordResetEmail = (user: { id: string; email: string; name:
         "If you did not ask for this, ignore this email.",
       ].join("\n"),
     });
-  })().catch((error) => console.error("Password reset email failed:", error));
+  })().catch((error) => logger.error("password reset email failed", { userId: user.id, err: error }));
 };

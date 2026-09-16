@@ -3,6 +3,7 @@ import { AgencyReminderKind, AgencyStatus, Role, UserStatus } from "../../../gen
 import { env } from "../../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { sendEmail } from "../../utils/email.js";
+import { logger } from "../../lib/logger.js";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -179,7 +180,7 @@ const deliver = async (candidate: Candidate): Promise<{ claimed: boolean; sent: 
     } catch (error) {
       // One bad address must not stop the rest; the claim stays, so a broken
       // mailbox is not retried every hour.
-      console.error(`Subscription reminder to ${admin.email} failed:`, error);
+      logger.error("reminder email failed", { agencyId: candidate.agencyId, kind: candidate.kind, err: error });
     }
   }
 
@@ -208,7 +209,7 @@ const runSubscriptionLifecycle = async (now = new Date()): Promise<ILifecycleRun
       emails += sent;
     } catch (error) {
       // One agency's failure must not stop the others.
-      console.error(`Subscription reminder for agency ${candidate.agencyId} failed:`, error);
+      logger.error("reminder failed", { agencyId: candidate.agencyId, kind: candidate.kind, err: error });
     }
   }
 

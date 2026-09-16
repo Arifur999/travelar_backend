@@ -73,9 +73,9 @@ export class ApiClient {
   async request<T = any>(
     method: string,
     path: string,
-    options: { session?: Session; body?: unknown; ip?: string } = {},
+    options: { session?: Session; body?: unknown; ip?: string; headers?: Record<string, string> } = {},
   ): Promise<ApiResult<T>> {
-    const headers: Record<string, string> = { "X-Forwarded-For": options.ip ?? nextIp() };
+    const headers: Record<string, string> = { "X-Forwarded-For": options.ip ?? nextIp(), ...options.headers };
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
     if (options.session) {
       headers.Cookie = `accessToken=${options.session.accessToken}; better-auth.session_token=${options.session.token}`;

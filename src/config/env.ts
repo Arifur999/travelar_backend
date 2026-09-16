@@ -44,6 +44,9 @@ const envSchema = z.object({
   SUPER_ADMIN_EMAIL: z.email("SUPER_ADMIN_EMAIL must be a valid email"),
   SUPER_ADMIN_PASSWORD: z.string().min(8, "SUPER_ADMIN_PASSWORD must be at least 8 characters"),
 
+  // Defaults: info in production, debug in development, error in tests.
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error", "silent"]).optional(),
+
   CRON_SECRET: z.string().default(""),
   // In-process hourly jobs. Leave on for a single instance; set "false" where an
   // external scheduler calls /api/v1/internal/jobs/* instead, or on extra
@@ -60,6 +63,8 @@ const parsed = envSchema.safeParse(process.env);
 // Fail loudly at boot, listing every problem at once. A server that starts with
 // a bad secret fails much later, inside a request, with a confusing message.
 if (!parsed.success) {
+  // console, not the logger: the logger reads this config, and a boot that
+  // fails here must still say why.
   console.error("Invalid environment configuration:");
   for (const issue of parsed.error.issues) {
     console.error(`  ${issue.path.join(".")}: ${issue.message}`);

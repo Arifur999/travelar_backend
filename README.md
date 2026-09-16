@@ -78,6 +78,28 @@ schedule cannot run (serverless), set `JOBS_ENABLED=false` and `CRON_SECRET`,
 and have a scheduler call `POST /api/v1/internal/jobs/subscription-lifecycle`
 with header `x-cron-secret`. Without `CRON_SECRET` that route answers 404.
 
+## Logs
+
+Everything the API says goes through `src/app/lib/logger.ts` — one JSON object
+per line in production (`docker compose logs api | jq`), a short human line in
+development, and quiet in tests. `LOG_LEVEL` (`debug`/`info`/`warn`/`error`/
+`silent`) overrides the default, which is `info` in production and `debug`
+otherwise.
+
+Every request gets an id, returned as `x-request-id` and repeated as
+`requestId` in any error body. So a user who reports "it said something went
+wrong" can quote that id, and:
+
+```sh
+docker compose logs api | jq 'select(.requestId == "<the id>")'
+```
+
+gives the access line, the failure and its stack. An inbound `x-request-id`
+is honoured — so a trace started at the proxy continues here — but only if it
+is 8–64 characters of `[A-Za-z0-9._:-]`; anything else is replaced, because a
+log field must never carry whatever a client felt like sending. Query strings
+are deliberately not logged: they hold search terms and reset tokens.
+
 ## Architecture
 
 Feature-first modules under `src/app/module/<feature>/`, one-way layering

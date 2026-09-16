@@ -2,6 +2,7 @@ import { env } from "../../config/env.js";
 import { Role } from "../../generated/prisma/enums.js";
 import { auth } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * Creates the platform operator on first boot.
@@ -40,12 +41,12 @@ export const seedSuperAdmin = async () => {
       data: { role: Role.SUPER_ADMIN, emailVerified: true, agencyId: null },
     });
 
-    console.log(`Seeded super admin: ${env.SUPER_ADMIN_EMAIL}`);
+    logger.info("seeded the super admin", { email: env.SUPER_ADMIN_EMAIL });
   } catch (error) {
     // A half-created operator would block every later boot from trying again.
     if (createdUserId) {
       await prisma.user.delete({ where: { id: createdUserId } }).catch(() => undefined);
     }
-    console.error("Failed to seed the super admin:", error);
+    logger.error("super admin seeding failed", { err: error });
   }
 };

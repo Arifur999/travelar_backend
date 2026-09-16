@@ -16,6 +16,7 @@ import { QueryBuilder } from "../../utils/QueryBuilder.js";
 import { PostingService } from "../cashAccount/posting.service.js";
 import { BillingService } from "../billing/billing.service.js";
 import { AgencyLifecycleService } from "../agency/agencyLifecycle.service.js";
+import { logger } from "../../lib/logger.js";
 
 const toNumber = PostingService.toNumber;
 
@@ -30,7 +31,7 @@ const logActivity = async (
   try {
     await prisma.adminActivityLog.create({ data: { adminId, action, targetType, targetId, details } });
   } catch (error) {
-    console.error("Failed to write an activity log entry:", error);
+    logger.error("activity log write failed", { action, targetType, targetId, err: error });
   }
 };
 

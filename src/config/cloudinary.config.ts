@@ -2,6 +2,7 @@ import { v2 as cloudinary, UploadApiResponse } from "cloudinary";
 import status from "http-status";
 import AppError from "../app/errorHelpers/AppError.js";
 import { env } from "./env.js";
+import { logger } from "../app/lib/logger.js";
 
 cloudinary.config({
   cloud_name: env.CLOUDINARY_CLOUD_NAME,
@@ -34,6 +35,6 @@ export const deleteFileFromCloudinary = async (url: string) => {
     if (!publicId) return;
     await cloudinary.uploader.destroy(publicId);
   } catch (error) {
-    console.error("Failed to delete file from cloudinary:", error);
+    logger.error("cloudinary delete failed", { err: error });
   }
 };

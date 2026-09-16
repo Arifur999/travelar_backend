@@ -16,13 +16,10 @@ import { handleZodError } from "../errorHelpers/handleZodError.js";
 import { IError, IErrorResponse } from "../interfaces/error.interfaces.js";
 import { captureException } from "../lib/sentry.js";
 import { deleteUploadedFilesFromGlobalErrorHandler } from "../utils/deleteUploadedFilesFromGlobalError.js";
+import { logger } from "../lib/logger.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const globalErrorHandler = async (err: any, req: Request, res: Response, _next: NextFunction) => {
-  if (env.NODE_ENV === "development") {
-    console.log("Error from Global Error Handler", err);
-  }
-
   await deleteUploadedFilesFromGlobalErrorHandler(req);
 
   let errorSource: IError[] = [];
@@ -69,6 +66,14 @@ export const globalErrorHandler = async (err: any, req: Request, res: Response, 
     errorSource = [{ path: "", message: err.message }];
   }
 
+  // 5xx is ours to fix, so it is logged with the stack; 4xx is the caller's
+  // mistake and the access log line already records it.
+  if (statusCode >= status.INTERNAL_SERVER_ERROR) {
+    logger.error("unhandled error", { requestId: req.id, method: req.method, path: req.path, statusCode, err });
+  } else {
+    logger.debug("request error", { requestId: req.id, method: req.method, path: req.path, statusCode, message });
+  }
+
   // Report genuine server errors (5xx) to error monitoring — not expected
   // client errors like 401/403/404/validation, which would just be noise.
   if (statusCode >= status.INTERNAL_SERVER_ERROR) {
@@ -79,6 +84,7 @@ export const globalErrorHandler = async (err: any, req: Request, res: Response, 
     success: false,
     message,
     errorSource,
+    requestId: req.id,
     error: env.NODE_ENV === "development" ? err : undefined,
     stack: env.NODE_ENV === "development" ? stack : undefined,
   };

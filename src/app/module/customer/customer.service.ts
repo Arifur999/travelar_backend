@@ -446,9 +446,12 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
   // If a future change teaches one about a new kind of sale and not the other,
   // this says so in the logs instead of letting customers see two numbers.
   if (Math.abs(running - customer.currentDue) > 0.005) {
-    console.error(
-      `Customer ledger ${id} ends at ${running} but currentDue is ${customer.currentDue} — the two derivations have drifted`,
-    );
+    logger.error("customer ledger drifted from currentDue", {
+      customerId: id,
+      agencyId,
+      statementEndsAt: running,
+      currentDue: customer.currentDue,
+    });
   }
 
   return { customer, rows };

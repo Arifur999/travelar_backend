@@ -7,6 +7,7 @@ import { APIError } from "better-auth/api";
 import { auth } from "../../lib/auth.js";
 import { prisma } from "../../lib/prisma.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
+import { logger } from "../../lib/logger.js";
 import {
   IChangePasswordPayload,
   IForgotPasswordPayload,
@@ -58,7 +59,7 @@ const registerAgency = async (payload: IRegisterPayload) => {
     await prisma.agency.delete({ where: { id: agency.id } }).catch(() => undefined);
 
     if (error instanceof AppError) throw error;
-    console.error("Failed to create the agency admin:", error);
+    logger.error("agency admin creation failed", { agencyId: agency.id, err: error });
     throw new AppError(status.INTERNAL_SERVER_ERROR, "Could not complete registration");
   }
 };

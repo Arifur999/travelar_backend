@@ -1,5 +1,6 @@
 import { createClient, RedisClientType } from "redis";
 import { env } from "../../config/env.js";
+import { logger } from "./logger.js";
 
 // Every method here swallows its errors: Redis is a cache and a rate-limit
 // counter, never a source of truth, so the API must keep working without it.
@@ -9,7 +10,7 @@ class RedisService {
 
   async connect() {
     if (!env.REDIS_URL) {
-      console.log("REDIS_URL not set — Redis features are disabled.");
+      logger.info("Redis disabled", { reason: "REDIS_URL not set" });
       return;
     }
 
@@ -18,14 +19,14 @@ class RedisService {
 
       this.client.on("error", (error) => {
         this.isConnected = false;
-        console.error("Redis error:", error);
+        logger.error("Redis error", { err: error });
       });
       this.client.on("ready", () => { this.isConnected = true; });
       this.client.on("end", () => { this.isConnected = false; });
 
       await this.client.connect();
     } catch (error) {
-      console.error("Redis connection failed:", error);
+      logger.error("Redis connection failed", { err: error });
     }
   }
 
@@ -37,7 +38,7 @@ class RedisService {
    */
   private logFailure(action: string, error: unknown) {
     if (!env.REDIS_URL) return;
-    console.error(`Redis ${action} failed: ${error instanceof Error ? error.message : String(error)}`);
+    logger.warn("Redis command failed", { action, message: error instanceof Error ? error.message : String(error) });
   }
 
   private ensureConnected(): RedisClientType {

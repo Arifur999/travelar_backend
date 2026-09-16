@@ -67,6 +67,7 @@ case the in-memory limiter exists for.
 | `securityHeaders.test.ts` | helmet headers on JSON successes, errors and 404s; no X-Powered-By; PDFs unaffected |
 | `queryCount.test.ts` | list endpoints cost the same number of database queries for 5 rows as for 30 (counted at the pg driver), and the batched per-row figures are right |
 | `rateLimit.test.ts` | per-address and per-account limits, without Redis |
+| `observability.test.ts` | every response carries `x-request-id`; a caller's trace id continues, a made-up one is replaced; error bodies repeat the id; access lines record user and agency but never the query string |
 
 Several of these are regression tests for real bugs — each says which in a
 comment. Keep them when refactoring the code they cover.

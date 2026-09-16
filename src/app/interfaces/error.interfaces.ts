@@ -8,6 +8,8 @@ export interface IErrorResponse {
   success: boolean;
   message: string;
   errorSource: IError[];
+  /** Matches the x-request-id header; quoting it locates the request in the logs. */
+  requestId?: string;
   error?: unknown;
   stack?: string;
 }

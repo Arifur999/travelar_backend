@@ -1,5 +1,6 @@
 import { Request } from "express";
 import { deleteFileFromCloudinary } from "../../config/cloudinary.config.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * Multer has already pushed any uploaded file to Cloudinary by the time a later
@@ -27,9 +28,9 @@ export const deleteUploadedFilesFromGlobalErrorHandler = async (req: Request) =>
     if (urls.length === 0) return;
 
     await Promise.all(urls.map((url) => deleteFileFromCloudinary(url)));
-    console.log(`Deleted ${urls.length} uploaded file(s) from Cloudinary due to a request error.`);
+    logger.info("cleaned up uploads after a failed request", { files: urls.length });
   } catch (error) {
     // Cleanup must never mask the original error.
-    console.error("Failed to clean up uploaded files:", error);
+    logger.error("upload cleanup failed", { err: error });
   }
 };

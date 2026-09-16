@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import os from "node:os";
 import { env } from "../../config/env.js";
+import { logger } from "./logger.js";
 
 // Dependency-free Sentry reporter: we speak the envelope ingestion API directly
 // over fetch so nothing has to be added to the lockfile. Enable by setting
@@ -91,5 +92,5 @@ export const initErrorMonitoring = () => {
   process.on("uncaughtException", (error) => captureException(error, { kind: "uncaughtException" }));
   process.on("unhandledRejection", (reason) => captureException(reason, { kind: "unhandledRejection" }));
 
-  console.log("Error monitoring (Sentry) enabled");
+  logger.info("error monitoring enabled", { provider: "sentry" });
 };

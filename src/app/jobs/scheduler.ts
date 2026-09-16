@@ -1,6 +1,7 @@
 import cron, { type ScheduledTask } from "node-cron";
 import { env } from "../../config/env.js";
 import { AgencyLifecycleService } from "../module/agency/agencyLifecycle.service.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * In-process scheduled jobs, started by server.ts after the API is listening.
@@ -21,19 +22,23 @@ const runLifecycle = async (trigger: string) => {
     // Hourly runs stay quiet unless they did something; the startup run always
     // reports, so a deploy log shows the job is alive.
     if (trigger === "startup" || summary.expired || summary.reminders) {
-      console.log(
-        `[jobs] subscription lifecycle (${trigger}): ${summary.expired} expired, ${summary.reminders} reminders, ${summary.emails} emails`,
-      );
+      logger.info("subscription lifecycle ran", {
+        job: "subscription-lifecycle",
+        trigger,
+        expired: summary.expired,
+        reminders: summary.reminders,
+        emails: summary.emails,
+      });
     }
   } catch (error) {
     // A failed run must not take the API down; the next hour tries again.
-    console.error(`[jobs] subscription lifecycle (${trigger}) failed:`, error);
+    logger.error("subscription lifecycle failed", { job: "subscription-lifecycle", trigger, err: error });
   }
 };
 
 export const startScheduledJobs = () => {
   if (!env.JOBS_ENABLED) {
-    console.log("[jobs] JOBS_ENABLED=false — scheduled jobs are off.");
+    logger.info("scheduled jobs are off", { reason: "JOBS_ENABLED=false" });
     return;
   }
 
@@ -47,7 +52,7 @@ export const startScheduledJobs = () => {
     }),
   );
 
-  console.log("[jobs] subscription lifecycle scheduled hourly at :05 UTC, first run in 15 s");
+  logger.info("scheduled jobs started", { job: "subscription-lifecycle", schedule: "5 * * * * (UTC)", firstRunInSeconds: 15 });
 
   // Once shortly after boot, so a restart or deploy never waits up to an hour
   // to catch up. unref() keeps it from holding the process open on shutdown.

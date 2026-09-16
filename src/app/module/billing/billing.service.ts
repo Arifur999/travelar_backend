@@ -10,6 +10,7 @@ import AppError from "../../errorHelpers/AppError.js";
 import { prisma } from "../../lib/prisma.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import { PostingService } from "../cashAccount/posting.service.js";
+import { logger } from "../../lib/logger.js";
 import {
   buildTransactionId,
   createPaymentSession,
@@ -256,7 +257,7 @@ const handleIpn = async (body: Record<string, unknown>) => {
 
   const order = await prisma.subscriptionOrder.findUnique({ where: { transactionId } });
   if (!order) {
-    console.error(`[sslcommerz-ipn] unknown tran_id: ${transactionId}`);
+    logger.warn("IPN for an unknown transaction", { gateway: "sslcommerz", transactionId });
     return { received: true };
   }
 
