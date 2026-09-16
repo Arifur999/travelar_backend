@@ -41,42 +41,61 @@ const BOOKING_INCLUDE = {
 // field through at runtime. packagePrice is Omit-ted from T because it is
 // replaced by a plain number; left in, the type claimed Decimal & number and a
 // caller that trusted it to still be a Decimal crashed.
-const decorate = async <T extends { id: string; packagePrice: Prisma.Decimal }>(
+type DecoratedBooking<T> = Omit<T, "packagePrice"> & {
+  packagePrice: number;
+  totalPaid: number;
+  dueAmount: number;
+  documentsProgress: { received: number; total: number };
+};
+
+// Two grouped queries for a whole page (payments, document statuses), not two
+// per booking as before — see test/queryCount.test.ts.
+const decorateMany = async <T extends { id: string; packagePrice: Prisma.Decimal }>(
   agencyId: string,
-  booking: T,
-): Promise<
-  Omit<T, "packagePrice"> & {
-    packagePrice: number;
-    totalPaid: number;
-    dueAmount: number;
-    documentsProgress: { received: number; total: number };
-  }
-> => {
+  bookings: T[],
+): Promise<DecoratedBooking<T>[]> => {
+  if (bookings.length === 0) return [];
+  const ids = bookings.map((booking) => booking.id);
+
   const [paid, documents] = await Promise.all([
-    prisma.hajjPayment.aggregate({ where: { agencyId, bookingId: booking.id }, _sum: { amount: true } }),
+    prisma.hajjPayment.groupBy({
+      by: ["bookingId"],
+      where: { agencyId, bookingId: { in: ids } },
+      _sum: { amount: true },
+    }),
     prisma.hajjDocument.groupBy({
-      by: ["status"],
-      where: { agencyId, bookingId: booking.id },
+      by: ["bookingId", "status"],
+      where: { agencyId, bookingId: { in: ids } },
       _count: { _all: true },
     }),
   ]);
 
-  const packagePrice = toNumber(booking.packagePrice);
-  const totalPaid = toNumber(paid._sum.amount);
+  const paidByBooking = new Map(paid.map((row) => [row.bookingId, toNumber(row._sum.amount)]));
+  const progressByBooking = new Map<string, { received: number; total: number }>();
+  for (const row of documents) {
+    const progress = progressByBooking.get(row.bookingId) ?? { received: 0, total: 0 };
+    progress.total += row._count._all;
+    if (row.status !== DocumentStatus.PENDING) progress.received += row._count._all;
+    progressByBooking.set(row.bookingId, progress);
+  }
 
-  const received = documents
-    .filter((d) => d.status !== DocumentStatus.PENDING)
-    .reduce((sum, d) => sum + d._count._all, 0);
-  const total = documents.reduce((sum, d) => sum + d._count._all, 0);
-
-  return {
-    ...booking,
-    packagePrice,
-    totalPaid,
-    dueAmount: packagePrice - totalPaid,
-    documentsProgress: { received, total },
-  };
+  return bookings.map((booking) => {
+    const packagePrice = toNumber(booking.packagePrice);
+    const totalPaid = paidByBooking.get(booking.id) ?? 0;
+    return {
+      ...booking,
+      packagePrice,
+      totalPaid,
+      dueAmount: packagePrice - totalPaid,
+      documentsProgress: progressByBooking.get(booking.id) ?? { received: 0, total: 0 },
+    };
+  });
 };
+
+const decorate = async <T extends { id: string; packagePrice: Prisma.Decimal }>(
+  agencyId: string,
+  booking: T,
+): Promise<DecoratedBooking<T>> => (await decorateMany(agencyId, [booking]))[0]!;
 
 /**
  * One row per pilgrim. The package price is snapshotted at booking time, so a
@@ -165,7 +184,7 @@ const getAllBookings = async (agencyId: string, query: IqueryParams) => {
     .fields()
     .execute();
 
-  const decorated = await Promise.all(result.data.map((b) => decorate(agencyId, b)));
+  const decorated = await decorateMany(agencyId, result.data);
 
   const [revenue, collected] = await Promise.all([
     prisma.hajjBooking.aggregate({ where: { agencyId, ...LIVE_BOOKING }, _sum: { packagePrice: true } }),

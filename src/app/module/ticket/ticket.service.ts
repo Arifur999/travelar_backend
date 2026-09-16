@@ -78,23 +78,35 @@ const persistProfit = async (client: Prisma.TransactionClient, ticketId: string)
   });
 };
 
-const sumPayments = async (agencyId: string, ticketId: string) => {
-  const agg = await prisma.ticketPayment.aggregate({
-    where: { agencyId, ticketId },
+/**
+ * Adds the derived money to a page of tickets with one grouped query for the
+ * payments, however many rows there are. It used to run one aggregate per
+ * ticket, so a 100-row page cost 100 extra queries (test/queryCount.test.ts).
+ */
+const decorateMany = async <T extends Parameters<typeof computeTicketMoney>[0] & { id: string }>(
+  agencyId: string,
+  tickets: T[],
+) => {
+  if (tickets.length === 0) return [];
+
+  const paid = await prisma.ticketPayment.groupBy({
+    by: ["ticketId"],
+    where: { agencyId, ticketId: { in: tickets.map((ticket) => ticket.id) } },
     _sum: { amount: true },
   });
-  return toNumber(agg._sum.amount);
+  const paidByTicket = new Map(paid.map((row) => [row.ticketId, toNumber(row._sum.amount)]));
+
+  return tickets.map((ticket) => {
+    const money = computeTicketMoney(ticket);
+    const totalPaid = paidByTicket.get(ticket.id) ?? 0;
+    return { ...ticket, ...money, totalPaid, dueAmount: money.customerCharge - totalPaid };
+  });
 };
 
 const decorate = async <T extends Parameters<typeof computeTicketMoney>[0] & { id: string }>(
   agencyId: string,
   ticket: T,
-) => {
-  const money = computeTicketMoney(ticket);
-  const totalPaid = await sumPayments(agencyId, ticket.id);
-
-  return { ...ticket, ...money, totalPaid, dueAmount: money.customerCharge - totalPaid };
-};
+) => (await decorateMany(agencyId, [ticket]))[0]!;
 
 const assertReferencesBelongToAgency = async (agencyId: string, payload: Partial<ICreateTicketPayload>) => {
   if (payload.customerId) {
@@ -181,9 +193,10 @@ const getAllTickets = async (agencyId: string, query: IqueryParams) => {
     .fields()
     .execute();
 
-  const decorated = await Promise.all(result.data.map((ticket) => decorate(agencyId, ticket)));
+  const decorated = await decorateMany(agencyId, result.data);
 
-  // Outstanding across every match, not just this page.
+  // Agency-wide figures for the summary cards — every ticket, not just this
+  // page, and not narrowed by the table's search or filters (the cards say so).
   const totals = await prisma.ticket.aggregate({
     where: { agencyId, isDeleted: false },
     _sum: { fare: true, cost: true, profit: true, dateChangeFee: true, refundAmount: true },

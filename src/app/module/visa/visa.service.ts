@@ -41,35 +41,55 @@ const VISA_INCLUDE = {
  */
 // Generic so callers keep the full row type — the spread below passes every
 // field through at runtime, and the signature now says so.
-const decorate = async <T extends { id: string; serviceFee: Prisma.Decimal; embassyFee: Prisma.Decimal }>(
+//
+// Two grouped queries for a whole page (payments, document statuses), not two
+// per case as before — see test/queryCount.test.ts.
+const decorateMany = async <T extends { id: string; serviceFee: Prisma.Decimal; embassyFee: Prisma.Decimal }>(
   agencyId: string,
-  visaCase: T,
+  visaCases: T[],
 ) => {
+  if (visaCases.length === 0) return [];
+  const ids = visaCases.map((visaCase) => visaCase.id);
+
   const [paid, documents] = await Promise.all([
-    prisma.visaPayment.aggregate({ where: { agencyId, visaCaseId: visaCase.id }, _sum: { amount: true } }),
+    prisma.visaPayment.groupBy({
+      by: ["visaCaseId"],
+      where: { agencyId, visaCaseId: { in: ids } },
+      _sum: { amount: true },
+    }),
     prisma.visaDocument.groupBy({
-      by: ["status"],
-      where: { agencyId, visaCaseId: visaCase.id },
+      by: ["visaCaseId", "status"],
+      where: { agencyId, visaCaseId: { in: ids } },
       _count: { _all: true },
     }),
   ]);
 
-  const totalFee = toNumber(visaCase.serviceFee) + toNumber(visaCase.embassyFee);
-  const totalPaid = toNumber(paid._sum.amount);
+  const paidByCase = new Map(paid.map((row) => [row.visaCaseId, toNumber(row._sum.amount)]));
+  const progressByCase = new Map<string, { received: number; total: number }>();
+  for (const row of documents) {
+    const progress = progressByCase.get(row.visaCaseId) ?? { received: 0, total: 0 };
+    progress.total += row._count._all;
+    if (row.status !== DocumentStatus.PENDING) progress.received += row._count._all;
+    progressByCase.set(row.visaCaseId, progress);
+  }
 
-  const received = documents
-    .filter((d) => d.status !== DocumentStatus.PENDING)
-    .reduce((sum, d) => sum + d._count._all, 0);
-  const total = documents.reduce((sum, d) => sum + d._count._all, 0);
-
-  return {
-    ...visaCase,
-    totalFee,
-    totalPaid,
-    dueAmount: totalFee - totalPaid,
-    documentsProgress: { received, total },
-  };
+  return visaCases.map((visaCase) => {
+    const totalFee = toNumber(visaCase.serviceFee) + toNumber(visaCase.embassyFee);
+    const totalPaid = paidByCase.get(visaCase.id) ?? 0;
+    return {
+      ...visaCase,
+      totalFee,
+      totalPaid,
+      dueAmount: totalFee - totalPaid,
+      documentsProgress: progressByCase.get(visaCase.id) ?? { received: 0, total: 0 },
+    };
+  });
 };
+
+const decorate = async <T extends { id: string; serviceFee: Prisma.Decimal; embassyFee: Prisma.Decimal }>(
+  agencyId: string,
+  visaCase: T,
+) => (await decorateMany(agencyId, [visaCase]))[0]!;
 
 const createVisaCase = async (agencyId: string, payload: ICreateVisaCasePayload, user: IRequestUser) => {
   const customer = await prisma.customer.findFirst({
@@ -145,7 +165,7 @@ const getAllVisaCases = async (agencyId: string, query: IqueryParams) => {
     .fields()
     .execute();
 
-  const decorated = await Promise.all(result.data.map((c) => decorate(agencyId, c)));
+  const decorated = await decorateMany(agencyId, result.data);
 
   const totals = await prisma.visaCase.aggregate({
     where: { agencyId, isDeleted: false },

@@ -65,6 +65,7 @@ case the in-memory limiter exists for.
 | `invoice.test.ts` | PDFs for all three modules, embedded Unicode fonts, multi-page, JSON errors |
 | `subscriptionLifecycle.test.ts` | trial and subscription reminders reach active admins only, once per period, most urgent only; renewal re-arms; expiry flips status and emails once; long-lapsed agencies expired quietly; suspended skipped; operator and cron-secret triggers |
 | `securityHeaders.test.ts` | helmet headers on JSON successes, errors and 404s; no X-Powered-By; PDFs unaffected |
+| `queryCount.test.ts` | list endpoints cost the same number of database queries for 5 rows as for 30 (counted at the pg driver), and the batched per-row figures are right |
 | `rateLimit.test.ts` | per-address and per-account limits, without Redis |
 
 Several of these are regression tests for real bugs — each says which in a
