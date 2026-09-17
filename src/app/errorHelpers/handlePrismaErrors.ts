@@ -1,112 +1,132 @@
 import status from "http-status";
 import { Prisma } from "../../generated/prisma/client.js";
-import { IError, IErrorResponse } from "../interfaces/error.interfaces.js";
+import { IErrorResponse } from "../interfaces/error.interfaces.js";
+
+/**
+ * Prisma errors, turned into something safe to show a user.
+ *
+ * Nothing Prisma wrote is echoed. Its messages begin with the file and line of
+ * the failing call — the old mapper's "first meaningful line" was exactly that,
+ * so a bad `?sortBy=` answered with the server's absolute source path — and go
+ * on to quote the query itself. The web app shows 4xx messages to users
+ * verbatim, so they are written here in plain words instead. The full error
+ * is still logged: globalErrorHandler logs every 5xx with its stack.
+ */
+
+const SAFE_NAME = /^[A-Za-z0-9_.]{1,64}$/;
+/** Only ever repeat a name back if it is a plain identifier. */
+const safeName = (name: unknown) => (typeof name === "string" && SAFE_NAME.test(name) ? name : null);
 
 const getStatusCodeFromPrismaError = (code: string): number => {
   if (code === "P2002") return status.CONFLICT;
   if (["P2025", "P2001", "P2015", "P2018"].includes(code)) return status.NOT_FOUND;
-  if (["P1000", "P6002"].includes(code)) return status.UNAUTHORIZED;
-  if (["P1010", "P6010"].includes(code)) return status.FORBIDDEN;
-  if (code === "P6003") return status.PAYMENT_REQUIRED;
-  if (["P1008", "P2004", "P6004"].includes(code)) return status.GATEWAY_TIMEOUT;
-  if (code === "P5011") return status.TOO_MANY_REQUESTS;
-  if (code === "P6009") return status.REQUEST_ENTITY_TOO_LARGE;
-  if (code.startsWith("P1") || ["P2024", "P2037", "P6008"].includes(code)) {
-    return status.SERVICE_UNAVAILABLE;
-  }
+  if (["P1008", "P2024", "P2037"].includes(code)) return status.SERVICE_UNAVAILABLE;
+  if (code.startsWith("P1")) return status.SERVICE_UNAVAILABLE;
   if (code.startsWith("P2")) return status.BAD_REQUEST;
-  if (code.startsWith("P3") || code.startsWith("P4")) return status.INTERNAL_SERVER_ERROR;
   return status.INTERNAL_SERVER_ERROR;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const formatErrorMeta = (meta?: Record<string, any>): string[] => {
-  if (!meta) return [];
-
-  const parts: string[] = [];
-  if (meta.target) parts.push(`Field(s): ${Array.isArray(meta.target) ? meta.target.join(", ") : meta.target}`);
-  if (meta.field_name) parts.push(`Field: ${meta.field_name}`);
-  if (meta.column_name) parts.push(`Column: ${meta.column_name}`);
-  if (meta.table) parts.push(`Table: ${meta.table}`);
-  if (meta.model_name) parts.push(`Model: ${meta.model_name}`);
-  if (meta.relation_name) parts.push(`Relation: ${meta.relation_name}`);
-  if (meta.constraint) parts.push(`Constraint: ${meta.constraint}`);
-  if (meta.database_error) parts.push(`Database: ${meta.database_error}`);
-
-  return parts;
+const KNOWN_MESSAGES: Record<string, string> = {
+  P2000: "A value is longer than this field allows.",
+  P2001: "The record was not found.",
+  P2003: "This record is still linked to other records.",
+  P2011: "A required value is missing.",
+  P2014: "This change would break a link to other records.",
+  P2015: "A related record was not found.",
+  P2018: "A related record was not found.",
+  P2025: "The record was not found.",
 };
 
-// Prisma's raw message embeds the whole failing query, which leaks schema
-// detail to the client. Keep only the first meaningful line.
-const cleanPrismaMessage = (message: string): string => {
-  const cleaned = message.replace(/Invalid `.*?` invocation:?\s*/i, "");
-  const lines = cleaned.split("\n").filter((line) => line.trim());
-  return lines[0] || "An error occurred with the database operation.";
+const genericMessage = (statusCode: number) => {
+  if (statusCode === status.SERVICE_UNAVAILABLE) return "The database is busy or unavailable. Please try again.";
+  if (statusCode >= 500) return "A database error occurred.";
+  return "The request could not be processed.";
 };
 
 export const handlePrismaClientKnownRequestError = (
   error: Prisma.PrismaClientKnownRequestError,
 ): IErrorResponse => {
   const statusCode = getStatusCodeFromPrismaError(error.code);
-  const mainMessage = cleanPrismaMessage(error.message);
-  const metaParts = formatErrorMeta(error.meta);
 
-  const errorSource: IError[] = [
-    { path: error.code, message: metaParts.length ? metaParts.join(" |") : mainMessage },
-  ];
-
-  if (error.meta?.cause) {
-    errorSource.push({ path: "cause", message: String(error.meta.cause) });
+  let message = KNOWN_MESSAGES[error.code] ?? genericMessage(statusCode);
+  if (error.code === "P2002") {
+    // Services check their own uniqueness and say which rule was broken; this
+    // is the fallback for a race or a rule nobody checked first.
+    const target = error.meta?.target;
+    const fields = (Array.isArray(target) ? target : [target]).map(safeName).filter(Boolean);
+    message = fields.length
+      ? `A record with the same ${fields.join(", ")} already exists.`
+      : "A record with these details already exists.";
   }
 
   return {
     success: false,
     statusCode,
-    message: `Prisma Client Known Request Error: ${mainMessage}`,
-    errorSource,
+    message,
+    errorSource: [{ path: error.code, message }],
   };
 };
 
-export const handlePrismaClientUnknownError = (
-  error: Prisma.PrismaClientUnknownRequestError,
-): IErrorResponse => ({
-  success: false,
-  statusCode: status.INTERNAL_SERVER_ERROR,
-  message: `Prisma Client Unknown Request Error: ${cleanPrismaMessage(error.message)}`,
-  errorSource: [{ path: "unknown", message: cleanPrismaMessage(error.message) }],
-});
+export const handlePrismaClientUnknownError = (): IErrorResponse => {
+  const message = genericMessage(status.INTERNAL_SERVER_ERROR);
+  return {
+    success: false,
+    statusCode: status.INTERNAL_SERVER_ERROR,
+    message,
+    errorSource: [{ path: "database", message }],
+  };
+};
 
+/**
+ * A query Prisma refused to build. From a client, that means a list parameter
+ * named something the model does not have — `?sortBy=`, `?fields=`, a filter.
+ * The offending name is the useful part, and the only part repeated.
+ */
 export const handlePrismaClientValidationError = (
   error: Prisma.PrismaClientValidationError,
 ): IErrorResponse => {
-  const cleaned = error.message.replace(/Invalid `.*?` invocation:?\s*/i, "");
-  const lines = cleaned.split("\n").filter((line) => line.trim());
+  const text = error.message;
+  const unknown = safeName(text.match(/Unknown (?:argument|field|arg) `([^`]+)`/i)?.[1]);
+  const missing = safeName(text.match(/Argument `([^`]+)` is missing/i)?.[1]);
+  const invalid = safeName(text.match(/Invalid value for argument `([^`]+)`/i)?.[1]);
 
-  const argumentMatch = cleaned.match(/Argument `(\w+)`/i);
-  const mainMessage =
-    lines.find((line) => !line.includes("Argument") && !line.includes("→") && line.length > 10) ||
-    "Invalid data provided.";
+  let message = "The request could not be processed.";
+  let path = "request";
+  if (unknown) {
+    message = `Unknown field "${unknown}".`;
+    path = unknown;
+  } else if (missing) {
+    message = `Missing required field "${missing}".`;
+    path = missing;
+  } else if (invalid) {
+    message = `Invalid value for "${invalid}".`;
+    path = invalid;
+  }
 
   return {
     success: false,
     statusCode: status.BAD_REQUEST,
-    message: `Prisma Client Validation Error: ${mainMessage.trim()}`,
-    errorSource: [{ path: argumentMatch?.[1] ?? "validation", message: mainMessage.trim() }],
+    message,
+    errorSource: [{ path, message }],
   };
 };
 
-export const handlerPrismaClientInitializationError = (
-  error: Prisma.PrismaClientInitializationError,
-): IErrorResponse => ({
-  success: false,
-  statusCode: status.SERVICE_UNAVAILABLE,
-  message: `Prisma Client Initialization Error: ${cleanPrismaMessage(error.message)}`,
-  errorSource: [{ path: error.errorCode ?? "initialization", message: cleanPrismaMessage(error.message) }],
-});
+export const handlerPrismaClientInitializationError = (): IErrorResponse => {
+  const message = genericMessage(status.SERVICE_UNAVAILABLE);
+  return {
+    success: false,
+    statusCode: status.SERVICE_UNAVAILABLE,
+    message,
+    errorSource: [{ path: "database", message }],
+  };
+};
 
-export const handlerPrismaClientRustPanicError = (): IErrorResponse => ({
-  success: false,
-  statusCode: status.INTERNAL_SERVER_ERROR,
-  message: "Prisma Client Rust Panic Error: the query engine crashed. Please retry.",
-  errorSource: [{ path: "engine", message: "The Prisma query engine panicked." }],
-});
+export const handlerPrismaClientRustPanicError = (): IErrorResponse => {
+  const message = genericMessage(status.INTERNAL_SERVER_ERROR);
+  return {
+    success: false,
+    statusCode: status.INTERNAL_SERVER_ERROR,
+    message,
+    errorSource: [{ path: "database", message }],
+  };
+};

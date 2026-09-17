@@ -51,7 +51,14 @@ export interface Session {
 
 export interface ApiResult<T = any> {
   status: number;
-  body: { success: boolean; message: string; data: T; meta?: { total: number } };
+  body: {
+    success: boolean;
+    message: string;
+    data: T;
+    meta?: { page: number; limit: number; total: number; totalPages: number };
+    /** Present on error envelopes. */
+    requestId?: string;
+  };
   headers: Headers;
   raw: Buffer;
 }

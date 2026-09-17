@@ -14,6 +14,28 @@ const EXCLUDED_FIELDS = ["searchTerm", "page", "limit", "sortBy", "sortOrder", "
 const SCALAR_OPERATORS = ["lt", "lte", "gt", "gte", "equals", "not", "contains", "startsWith", "endsWith"];
 const ARRAY_OPERATORS = ["in", "notIn"];
 
+export const DEFAULT_PAGE_SIZE = 10;
+/**
+ * The largest page any caller gets. Without a ceiling, `?limit=10000000` made
+ * one request load a whole table.
+ *
+ * 200 exactly, because the web app asks for `limit=200` to fill its dropdowns
+ * (airlines, routes, visa agents, Hajj packages and batches). A lower cap would
+ * silently cut those lists short.
+ */
+export const MAX_PAGE_SIZE = 200;
+/** Prisma's `skip` is a 32-bit integer; a page past this could not be expressed. */
+const MAX_SKIP = 2_000_000_000;
+
+/** A positive whole number, or the fallback. "2.5", "-1", "0" and "abc" all fall back. */
+const positiveInteger = (value: unknown, fallback: number) => {
+  const parsed = typeof value === "string" && /^\d+$/.test(value.trim()) ? Number(value) : NaN;
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+/** `field` or `relation.field` — anything else is not a sort key. */
+const SORT_KEY = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
+
 export class QueryBuilder<
   T,
   TWhereInput = Record<string, unknown>,
@@ -189,9 +211,12 @@ export class QueryBuilder<
     return this;
   }
 
+  // Paging comes straight from the query string, so it is normalised here:
+  // `page=-1` used to reach Prisma as a negative skip and answer 500,
+  // `limit=-5` returned rows with totalPages -2, and nothing capped the size.
   paginate(): this {
-    this.page = Number(this.queryParams.page) || 1;
-    this.limit = Number(this.queryParams.limit) || 10;
+    this.limit = Math.min(positiveInteger(this.queryParams.limit, DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
+    this.page = Math.min(positiveInteger(this.queryParams.page, 1), Math.floor(MAX_SKIP / this.limit) + 1);
     this.skip = (this.page - 1) * this.limit;
 
     this.query.skip = this.skip;
@@ -199,8 +224,11 @@ export class QueryBuilder<
     return this;
   }
 
+  // A sortBy naming a column the model lacks still reaches Prisma, which
+  // refuses it; globalErrorHandler turns that into a plain 400.
   sort(): this {
-    this.sortBy = this.queryParams.sortBy || "createdAt";
+    const requested = typeof this.queryParams.sortBy === "string" ? this.queryParams.sortBy.trim() : "";
+    this.sortBy = SORT_KEY.test(requested) ? requested : "createdAt";
     this.sortOrder = this.queryParams.sortOrder === "asc" ? "asc" : "desc";
 
     const path = this.sortBy.split(".");

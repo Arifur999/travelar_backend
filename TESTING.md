@@ -69,6 +69,7 @@ case the in-memory limiter exists for.
 | `securityHeaders.test.ts` | helmet headers on JSON successes, errors and 404s; no X-Powered-By; PDFs unaffected |
 | `queryCount.test.ts` | list endpoints cost the same number of database queries for 5 rows as for 30 (counted at the pg driver), and the batched per-row figures are right |
 | `rateLimit.test.ts` | per-address and per-account limits, without Redis |
+| `queryParams.test.ts` | Whatever is typed into a list URL: invalid, negative, fractional or huge `page`/`limit` fall back or are capped (at 200, the size the web app's dropdowns ask for) instead of answering 500 or loading a whole table; a malformed `sortBy` falls back; an unknown field is a plain 400 naming the field; no error body carries a file path, source location or Prisma's wording |
 | `rowLock.test.ts` | Every table `lockRow` names as a string really exists with the columns its FOR UPDATE query uses — a schema rename would otherwise disable the concurrency guards silently |
 | `observability.test.ts` | every response carries `x-request-id`; a caller's trace id continues, a made-up one is replaced; error bodies repeat the id; access lines record user and agency but never the query string |
 

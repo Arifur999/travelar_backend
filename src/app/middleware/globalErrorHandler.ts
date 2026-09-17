@@ -37,11 +37,11 @@ export const globalErrorHandler = async (err: any, req: Request, res: Response, 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     applySimplified(handlePrismaClientKnownRequestError(err), err.stack);
   } else if (err instanceof Prisma.PrismaClientUnknownRequestError) {
-    applySimplified(handlePrismaClientUnknownError(err), err.stack);
+    applySimplified(handlePrismaClientUnknownError(), err.stack);
   } else if (err instanceof Prisma.PrismaClientValidationError) {
     applySimplified(handlePrismaClientValidationError(err), err.stack);
   } else if (err instanceof Prisma.PrismaClientInitializationError) {
-    applySimplified(handlerPrismaClientInitializationError(err), err.stack);
+    applySimplified(handlerPrismaClientInitializationError(), err.stack);
   } else if (err instanceof Prisma.PrismaClientRustPanicError) {
     applySimplified(handlerPrismaClientRustPanicError(), err.stack);
   } else if (err instanceof z.ZodError) {
@@ -60,10 +60,13 @@ export const globalErrorHandler = async (err: any, req: Request, res: Response, 
     stack = err.stack;
     errorSource = [{ path: "", message: err.message }];
   } else if (err instanceof Error) {
+    // An error nobody anticipated: its message describes our internals ("Cannot
+    // read properties of undefined…"), so outside development the caller gets
+    // a plain sentence and the request id, and the log gets the rest.
     statusCode = status.INTERNAL_SERVER_ERROR;
-    message = err.message;
+    message = env.NODE_ENV === "development" ? err.message : "Internal Server Error";
     stack = err.stack;
-    errorSource = [{ path: "", message: err.message }];
+    errorSource = [{ path: "", message }];
   }
 
   // 5xx is ours to fix, so it is logged with the stack; 4xx is the caller's
