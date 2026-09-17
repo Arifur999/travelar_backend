@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the Travelar certificate once a day
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=2h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew the Travelar certificate when it is due
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /usr/local/lib/travelar/agent/travelar-cert.sh

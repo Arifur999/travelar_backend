@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage 2 — starts the Travelar stack and installs the two timers. Safe to
+# Stage 2 — starts the Travelar stack and installs the three timers. Safe to
 # re-run; after a `git pull` it installs the updated scripts.
 #
 #   bash install.sh
@@ -7,11 +7,12 @@
 # Touches no other project: the stack publishes no port and only joins the
 # proxy network. The site stays unreachable until attach-site.sh adds its vhost.
 #
-# Timers, both no-ops in the common case:
+# Timers, all no-ops in the common case:
 #   travelar-deploy  every 2 min — pulls newly published images and rolls
 #                    forward, or back if the new release is not healthy
 #   travelar-vhost   every 2 min — re-attaches the vhost if a furnify deploy
 #                    dropped it
+#   travelar-cert    daily       — renews the certificate when it is due
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
@@ -34,7 +35,7 @@ step "1. Scripts"
 rm -rf "$LIB_DIR"
 mkdir -p "$LIB_DIR"
 cp -r "$SRC/lib.sh" "$SRC/ensure-site.sh" "$SRC/nginx" "$SRC/agent" "$LIB_DIR/"
-chmod 0755 "$LIB_DIR/ensure-site.sh" "$LIB_DIR/agent/travelar-deploy.sh"
+chmod 0755 "$LIB_DIR/ensure-site.sh" "$LIB_DIR"/agent/*.sh
 ok "installed into $LIB_DIR"
 
 step "2. First release"
@@ -77,18 +78,19 @@ esac
 docker ps --filter name=travelar- --format '     {{.Names}}  {{.Status}}'
 
 step "3. Timers"
-for unit in travelar-deploy travelar-vhost; do
+for unit in travelar-deploy travelar-vhost travelar-cert; do
   install -m 0644 "$SRC/agent/$unit.service" /etc/systemd/system/
   install -m 0644 "$SRC/agent/$unit.timer"   /etc/systemd/system/
 done
 systemctl daemon-reload
-systemctl enable --now travelar-deploy.timer travelar-vhost.timer
-systemctl list-timers 'travelar-*' --no-pager | head -4
+systemctl enable --now travelar-deploy.timer travelar-vhost.timer travelar-cert.timer
+systemctl list-timers 'travelar-*' --no-pager | head -5
 
 cat <<EOF
 
 $(printf '\033[1mStage 2 done.\033[0m') The stack is running, reachable only inside Docker.
 
-Next, if $DOMAIN is not attached yet:
-  bash $SRC/attach-site.sh
+Next: bash $SRC/attach-site.sh
+  first time: certificate + nginx vhost for $DOMAIN
+  after a git pull: applies any change to the vhost (graceful reload only)
 EOF

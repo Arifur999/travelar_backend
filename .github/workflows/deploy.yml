@@ -11,6 +11,14 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # A push that only touches these cannot change the image: the runtime stage
+    # copies src, prisma and package files only. Publishing anyway would still
+    # produce a new digest, and every new digest restarts the live containers.
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "deploy/**"
+      - "ops/**"
   workflow_dispatch:
 
 concurrency:

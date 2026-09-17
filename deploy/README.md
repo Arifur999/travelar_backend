@@ -22,7 +22,13 @@ push to main (either repo)
 ```
 
 A red CI run publishes nothing, so the site keeps running the last good
-release. Nothing in GitHub can reach the server: its runners are filtered on
+release. A push that only changes docs, `deploy/` or `ops/` (or, in the web
+repo, only Markdown) publishes nothing either, so it does not restart
+anything.
+
+A release replaces the containers, which takes a few seconds. During that
+window nginx answers with a 503 "Travelar is updating" page that reloads
+itself, not a bare 502. Nothing in GitHub can reach the server: its runners are filtered on
 port 22, so the server pulls instead, and no SSH key is stored in GitHub.
 
 The two repos release independently. A change that needs both sides should
@@ -89,7 +95,8 @@ cd /root/travelar-src/deploy
 
 # asks for your email: it becomes the operator login and the Let's Encrypt contact
 read -rp "Your email: " E && bash bootstrap.sh "$E"
-nano /opt/travelar/.env                # SMTP and SSLCommerz (can wait)
+bash set-env.sh --smtp                 # outgoing mail (password reset) + a login test; can wait
+bash set-env.sh SSLCOMMERZ_STORE_ID SSLCOMMERZ_STORE_PASSWORD   # payments; can wait
 bash install.sh                        # start the stack, install the timers
 bash attach-site.sh                    # certificate + vhost, checks the neighbours
 ```
@@ -158,8 +165,14 @@ docker logs -f travelar-web
 docker logs -f travelar-api
 docker logs travelar-api | jq 'select(.requestId == "<id>")'
 
-# after changing /opt/travelar/.env
+# change settings: asks for each value (passwords hidden), saves, applies
+bash /root/travelar-src/deploy/set-env.sh --smtp
+bash /root/travelar-src/deploy/set-env.sh SSLCOMMERZ_IS_LIVE
+# after editing /opt/travelar/.env by hand instead
 cd /opt/travelar && docker compose up -d
+
+# no SMTP yet? a password-reset link is only written to the API log:
+docker logs travelar-api 2>&1 | grep 'email not sent' | tail -1
 
 # move to another public name (its A record must already point here)
 read -rp "New public name: " D && sed -i "s|^DOMAIN=.*|DOMAIN=$D|" /opt/travelar/.env
@@ -167,13 +180,19 @@ cd /opt/travelar && docker compose up -d        # apps now build URLs for the ne
 bash /root/travelar-src/deploy/attach-site.sh   # certificate + vhost for it
 # a previously attached name keeps its vhost file and mount line until removed by hand
 
-# update the scripts or the compose file after they change in git
+# update the scripts, the compose file or the vhost after they change in git
 cd /root/travelar-src && git pull
-bash deploy/bootstrap.sh && bash deploy/install.sh
+bash deploy/bootstrap.sh && bash deploy/install.sh && bash deploy/attach-site.sh
 
 # backups: /opt/travelar/backups (copy them off the box); restore: ops/backup/README.md
 
-# renew certificates (all domains share furnify's certbot volumes)
+# Travelar's certificate: travelar-cert.timer checks daily and renews inside
+# 30 days of expiry. To run the check now:
+systemctl start travelar-cert && journalctl -u travelar-cert -n 5 --no-pager
+
+# every certificate on the box (all domains share furnify's certbot volumes).
+# furnify's certbot service only runs when called, so check that something
+# renews softech's and furnify's too: systemctl list-timers; crontab -l
 cd /srv/hatim/hatim_Backend
 docker compose run --rm certbot renew
 docker exec hatim_backend-nginx-1 nginx -t && docker exec hatim_backend-nginx-1 nginx -s reload
