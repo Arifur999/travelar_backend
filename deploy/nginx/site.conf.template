@@ -1,0 +1,113 @@
+# __DOMAIN__ — Travelar. Rendered by attach-site.sh (and re-checked by
+# ensure-site.sh) into /opt/travelar/nginx/__DOMAIN__.conf, which is bind
+# mounted into hatim_backend-nginx-1 as conf.d/__DOMAIN__.conf.
+#
+# Two containers behind one name:
+#   /api/v1/billing/sslcommerz/*  -> travelar-api:5050  (payment gateway callbacks)
+#   everything else              -> travelar-web:3000
+# The rest of the API is not published: the web server talks to it over the
+# stack's internal network, and the browser never calls it.
+
+server {
+    listen 80;
+    server_name __DOMAIN__;
+
+    # Above the redirect, or renewals start failing silently in 90 days.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name __DOMAIN__;
+
+    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # No add_header here, deliberately. Both apps set their own security
+    # headers (the web app a per-request nonce CSP, X-Frame-Options, HSTS and
+    # the rest; the API helmet's), and nginx does not merge — it would send a
+    # second copy. Two X-Frame-Options values are treated as invalid, which is
+    # weaker than one.
+
+    # A 5 MB document upload plus the form around it.
+    client_max_body_size 10m;
+
+    # Next answers with large headers (a nonce CSP, auth cookies, preload
+    # links); the default 4k buffer turns that into a 502.
+    proxy_buffer_size       16k;
+    proxy_buffers           8 16k;
+    proxy_busy_buffers_size 32k;
+
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+
+    # Docker's embedded DNS. Needed because the upstream hosts below are held
+    # in variables: with a literal hostname nginx resolves it while LOADING the
+    # config, so a stopped Travelar container would fail `nginx -t` and a
+    # restart of this proxy — taking furnify and softech.agency down with it.
+    # Through a variable, a stopped container is a 502 on this name only.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    # SSLCommerz posts the IPN server-to-server, and sends the buyer's browser
+    # to success/fail/cancel. The API answers these itself.
+    location /api/v1/billing/sslcommerz/ {
+        set $travelar_api travelar-api;
+        proxy_pass http://$travelar_api:5050;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 5s;
+        proxy_read_timeout    60s;
+    }
+
+    # Content-hashed build output. Next already sends a year-long immutable
+    # Cache-Control for it; this only keeps it out of the access log.
+    location /_next/static/ {
+        set $travelar_web travelar-web;
+        proxy_pass http://$travelar_web:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        access_log off;
+    }
+
+    location / {
+        set $travelar_web travelar-web;
+        proxy_pass http://$travelar_web:3000;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        # The web app forwards the LAST entry of this header to the API, which
+        # rate-limits sign-ins per address; appending makes that entry the
+        # address nginx saw, whatever the client wrote into the header itself.
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        proxy_connect_timeout 5s;
+        # PDF invoices are rendered on request.
+        proxy_read_timeout    60s;
+    }
+}

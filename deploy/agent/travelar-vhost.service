@@ -1,0 +1,8 @@
+[Unit]
+Description=Re-attach the Travelar vhost if a furnify deploy removed it
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /usr/local/lib/travelar/ensure-site.sh --quiet

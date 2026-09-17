@@ -1,0 +1,21 @@
+# __DOMAIN__ — stage 1, only until the certificate exists.
+# Rendered by attach-site.sh into /opt/travelar/nginx/__DOMAIN__.conf.
+#
+# furnify's `listen 80 default_server` answers unknown hosts with 444, which
+# closes an ACME challenge before certbot can answer it. This block claims the
+# name on port 80 and nothing else. No 443 yet: nginx refuses to start when
+# ssl_certificate points at a missing file, and that would take every other
+# site on this proxy down with it.
+
+server {
+    listen 80;
+    server_name __DOMAIN__;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 404;
+    }
+}

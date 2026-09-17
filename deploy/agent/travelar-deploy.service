@@ -1,0 +1,8 @@
+[Unit]
+Description=Release Travelar when a new API or web image is published
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /usr/local/lib/travelar/agent/travelar-deploy.sh

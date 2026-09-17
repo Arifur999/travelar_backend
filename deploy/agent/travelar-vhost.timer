@@ -1,0 +1,10 @@
+[Unit]
+Description=Check every 2 minutes that Travelar is still attached to the proxy
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=2min
+AccuracySec=20s
+
+[Install]
+WantedBy=timers.target

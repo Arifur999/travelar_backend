@@ -20,6 +20,21 @@ pnpm dev                      # API on http://localhost:5050
 > and silently wins over the container, which shows up as `P1000: Authentication
 > failed`.
 
+## Live site and releases
+
+Production runs at **travelar.softech.agency**, on the same VPS as two other
+live sites. A push to `main` goes live only through this path:
+
+1. The `Deploy` workflow runs CI (lint, typecheck, integration tests).
+2. Only if CI passes, it publishes `ghcr.io/arifur999/travelar-api`.
+3. Within two minutes, a timer on the server pulls the new image, runs the
+   migrations and waits for the API to report healthy.
+4. If the new release does not become healthy, the timer puts the previous
+   release back.
+
+The web repo releases `travelar-web` the same way. Server setup and
+day-to-day operations are in [`deploy/README.md`](deploy/README.md).
+
 ## Run the full stack in Docker
 
 Postgres, migrations, this API and the [web app](https://github.com/Arifur999/travelar)

@@ -1,3 +1,5 @@
 # Shell scripts run inside Linux containers: CRLF endings ("/bin/sh^M") break
 # them, and core.autocrlf would otherwise check them out that way on Windows.
 *.sh text eol=lf
+# Copied to the VPS as-is: nginx vhosts, systemd units, the compose file.
+deploy/** text eol=lf
