@@ -87,7 +87,8 @@ be pulled without logging in, so the server needs no GitHub credentials. If
 git clone https://github.com/Arifur999/travelar_backend.git /root/travelar-src
 cd /root/travelar-src/deploy
 
-bash bootstrap.sh YOUR-REAL-EMAIL      # operator login + Let's Encrypt contact; writes /opt/travelar/.env
+# asks for your email: it becomes the operator login and the Let's Encrypt contact
+read -rp "Your email: " E && bash bootstrap.sh "$E"
 nano /opt/travelar/.env                # SMTP and SSLCommerz (can wait)
 bash install.sh                        # start the stack, install the timers
 bash attach-site.sh                    # certificate + vhost, checks the neighbours

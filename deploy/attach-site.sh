@@ -23,7 +23,7 @@ load_domain
 EMAIL="${1:-$(env_get SUPER_ADMIN_EMAIL)}"
 [ -n "$EMAIL" ] || die "usage: bash attach-site.sh your-real@email"
 is_placeholder_email "$EMAIL" \
-  && die "Let's Encrypt contact would be the example address $EMAIL — pass your own: bash attach-site.sh your-real@email"
+  && die "\"$EMAIL\" is not a usable email for Let's Encrypt. $(placeholder_email_help "$EMAIL")"
 
 step "1. Preflight"
 docker inspect "$NGINX_CTR" >/dev/null 2>&1 || die "container $NGINX_CTR not found"

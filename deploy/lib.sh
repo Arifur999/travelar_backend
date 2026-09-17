@@ -42,22 +42,26 @@ resolve_v4() {
   { getent ahostsv4 "$1" || true; } | awk '{print $1}' | sort -u | tr '\n' ' ' | sed 's/ $//'
 }
 
-# The examples in the docs and messages, which must never become a real login
-# or the Let's Encrypt contact.
+# True for anything that must never become the operator login or the Let's
+# Encrypt contact: an example address from the docs, or text that is not an
+# email at all. Commands get pasted exactly as written — `YOUR-REAL-EMAIL`
+# ended up in a real .env — and the API refuses to boot on an invalid one.
 is_placeholder_email() {
   case "$1" in
     your@email.com|you@example.com|*@example.com|*@example.org|*@example.net) return 0 ;;
-    *) return 1 ;;
   esac
+  [[ "$1" =~ ^[^@[:space:]\"\'\|]+@[^@[:space:]\"\'\|]+\.[A-Za-z]{2,}$ ]] && return 1
+  return 0
 }
 
-# The fix for a placeholder operator email. It only works before the API's
-# first boot, which is when the operator account is created from it.
+# How to set the operator email. It asks for the address instead of showing
+# one to replace, because a shown example gets pasted as is. Only effective
+# before the API's first start, which creates the account from it.
 placeholder_email_help() {
   cat <<EOF
-SUPER_ADMIN_EMAIL in $ENV_FILE is still the example address ($1).
-       It becomes the operator login on the API's first start, so set yours first:
-         sed -i 's|^SUPER_ADMIN_EMAIL=.*|SUPER_ADMIN_EMAIL=you@yourdomain|' $ENV_FILE
+SUPER_ADMIN_EMAIL in $ENV_FILE is "$1", which is not a real email address.
+       It becomes the operator login on the API's first start. Set yours — this asks for it:
+         read -rp "Your email: " E && sed -i "s|^SUPER_ADMIN_EMAIL=.*|SUPER_ADMIN_EMAIL=\$E|" $ENV_FILE
 EOF
 }
 
