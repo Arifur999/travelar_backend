@@ -42,6 +42,19 @@ router.use("/visa", VisaRoutes);
 router.use("/hajj", HajjRoutes);
 router.use("/employees", EmployeeRoutes);
 router.use("/dashboard", DashboardRoutes);
+
+// Public gateway callbacks — no session, called server-to-server by SSLCommerz
+// and by the customer's browser after paying.
+//
+// ORDER IS LOAD-BEARING: this must be mounted BEFORE BillingRoutes. That router
+// opens with `router.use(checkAuth(...))`, and a router-level middleware runs
+// for EVERY request that enters the router — including paths none of its own
+// routes match. Mounted after it, as this was, the gateway's IPN was answered
+// "401 No session token provided", so no online payment was ever recorded: the
+// agency paid, the order stayed PENDING and the subscription never started.
+// test/billing.test.ts posts to these routes without a session and fails if
+// this moves back.
+router.use("/billing", billingWebhookRouter);
 router.use("/billing", BillingRoutes);
 router.use("/admin", AdminRoutes);
 router.use("/admin", adminSupportRouter);
@@ -49,8 +62,5 @@ router.use("/support", SupportRoutes);
 
 // Scheduler hooks — no session; a shared secret instead. 404 unless CRON_SECRET is set.
 router.use("/internal", InternalRoutes);
-
-// Public gateway callbacks — no session, called server-to-server.
-router.use("/billing", billingWebhookRouter);
 
 export const indexRoute = router;

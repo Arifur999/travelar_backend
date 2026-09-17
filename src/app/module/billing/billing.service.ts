@@ -170,10 +170,14 @@ const startCheckout = async (agencyId: string, planId: string, user: IRequestUse
 /**
  * Retries a failed or abandoned attempt.
  *
- * The previous order is cancelled first. The old implementation left it
- * PENDING, so if both it and the retry eventually succeeded the subscription
- * was renewed twice — the agency paid once and the gateway could still settle
- * the first attempt later.
+ * The previous order is cancelled first, so it is no longer the attempt the
+ * status page follows and cannot itself be retried again.
+ *
+ * What cancelling does NOT do is stop that attempt being paid. Its gateway page
+ * may still be open, and SSLCommerz has no cancel call here. If it does settle,
+ * handleIpn honours it — the money is real — and logs it as a likely duplicate
+ * charge. (An earlier version of this comment claimed cancelling prevented the
+ * double renewal; it never did.)
  */
 const retryOrder = async (agencyId: string, transactionId: string, user: IRequestUser) => {
   const order = await prisma.subscriptionOrder.findFirst({
@@ -288,6 +292,30 @@ const handleIpn = async (body: Record<string, unknown>) => {
     return { received: true };
   }
 
+  // Which order did the gateway actually confirm? The IPN body names one, the
+  // val_id names a payment, and nothing tied the two together: a genuine val_id
+  // from one paid order, posted with another order's tran_id, passed every
+  // check below — status, amount and currency all describe a real payment. So
+  // one payment could settle any number of same-priced orders, the agency's own
+  // or another agency's. A missing tran_id fails closed.
+  //
+  // The same applies when the validator does not recognise the val_id at all
+  // (it answers with no tran_id). Either way the notification says nothing
+  // verifiable about THIS order, so it is not recorded against it. Marking it
+  // FAILED would let anyone who knows a tran_id flip a customer's in-progress
+  // payment to "failed" with an invented val_id — and if the validator were
+  // merely inconsistent, show "failed" for money that did move. A genuine
+  // rejection names this order's tran_id and is recorded as FAILED below.
+  if (validation.tran_id !== order.transactionId) {
+    logger.warn("IPN payment could not be tied to this order", {
+      gateway: "sslcommerz",
+      transactionId: order.transactionId,
+      validatedTransactionId: validation.tran_id ?? null,
+      validationStatus: validation.status ?? null,
+    });
+    return { received: true };
+  }
+
   const statusOk = validation.status === "VALID" || validation.status === "VALIDATED";
   const amountOk = Math.abs(Number(validation.amount) - toNumber(order.amount)) < 1;
   const currencyOk = (validation.currency ?? "BDT") === "BDT";
@@ -306,6 +334,11 @@ const handleIpn = async (body: Record<string, unknown>) => {
   const plan = await prisma.plan.findUnique({ where: { id: order.planId } });
 
   await prisma.$transaction(async (tx) => {
+    const before = await tx.subscriptionOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      select: { status: true },
+    });
+
     // Claim the order atomically. Two notifications for the same payment can
     // arrive at once; only the one that flips the row from not-success wins,
     // and the loser skips renewal entirely.
@@ -320,6 +353,21 @@ const handleIpn = async (body: Record<string, unknown>) => {
     });
 
     if (claimed.count === 0) return;
+
+    // Cancelling an attempt cannot stop the customer finishing it — its gateway
+    // page may still be open in another tab — and the money has really been
+    // taken, so it is honoured rather than kept for nothing. But it most likely
+    // means they paid twice, which someone has to look at and refund.
+    if (before.status === SubscriptionOrderStatus.CANCELLED) {
+      logger.warn("payment settled on a cancelled checkout", {
+        gateway: "sslcommerz",
+        transactionId: order.transactionId,
+        agencyId: order.agencyId,
+        amount: toNumber(order.amount),
+        reason: "likely a duplicate charge; check whether a refund is due",
+      });
+    }
+
     if (!plan) return;
 
     await renewSubscription(

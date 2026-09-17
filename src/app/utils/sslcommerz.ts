@@ -28,6 +28,8 @@ export interface ISslSessionResponse {
 
 export interface ISslValidationResponse {
   status?: string;
+  /** Which of our orders this payment was for — must match the IPN's order. */
+  tran_id?: string;
   amount?: string | number;
   currency?: string;
   card_type?: string;
