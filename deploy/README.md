@@ -56,6 +56,10 @@ additive** (new tables, nullable or defaulted columns).
 - **Only the payment callbacks are public on the API.** The web server calls
   the API over the internal network. The browser never calls it, and the
   web app's CSP forbids it anyway.
+- **Memory.** Each container has a ceiling: db 512 MB, API 512 MB, web
+  768 MB, backup 128 MB. Measured idle with the real images, the stack uses
+  about 300 MB (API 173, web 72, db 57). Disk: about 1.2 GB for the two
+  images.
 - **Our own vhost file.** It lives at
   `/opt/travelar/nginx/travelar.softech.agency.conf` and is bind mounted into
   the proxy's `conf.d`. It is never appended to furnify's `nginx.conf`, which
@@ -71,10 +75,11 @@ to). Leave every other record alone. Wait until this prints that address:
 dig +short travelar.softech.agency
 ```
 
-**2. Images.** Push to `main` in both repos, or run their *Deploy* workflow
-by hand, and wait for it to go green. Then make both packages public:
-GitHub → your profile → Packages → `travelar-api` → Package settings →
-Change visibility → Public. Do the same for `travelar-web`.
+**2. Images.** Each repo's *Deploy* workflow publishes its image on every
+green push to `main`. Both packages were first published on 2026-09-17 and can
+be pulled without logging in, so the server needs no GitHub credentials. If
+`install.sh` ever reports that it cannot pull, check GitHub → Packages →
+`travelar-api` / `travelar-web` → Package settings → visibility.
 
 **3. On the VPS, as root:**
 
