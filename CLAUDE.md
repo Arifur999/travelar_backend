@@ -33,6 +33,7 @@ CI runs `generate → lint → typecheck → test` against a Postgres service co
   - the plan feature for each module (`checkFeatureAccess` in route files) ↔ `src/lib/navItem.ts`
   - `TeamService.assertCanManage` ↔ `src/lib/teamPermissions.ts`
   - auth password and token bounds ↔ `src/zod/auth.validation.ts`
+- **Request schemas are a contract.** Zod objects here strip unknown keys, so a field the web app names differently is dropped without an error. The web repo's CI (`pnpm check:contract` there) reads these schemas and fails when a payload type disagrees — renaming or requiring a field here breaks that check until the web type follows.
 - List query params (`searchTerm`, `page`, `limit`, `sortBy`, `sortOrder`, `field[op]=value`, `include`) are produced by the web app's URL-driven tables. Renaming one breaks every table.
 
 ## Architecture
