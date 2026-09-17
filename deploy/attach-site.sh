@@ -21,17 +21,23 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 require_root
 load_domain
 EMAIL="${1:-$(env_get SUPER_ADMIN_EMAIL)}"
-[ -n "$EMAIL" ] || die "usage: bash attach-site.sh you@example.com"
+[ -n "$EMAIL" ] || die "usage: bash attach-site.sh your-real@email"
+is_placeholder_email "$EMAIL" \
+  && die "Let's Encrypt contact would be the example address $EMAIL — pass your own: bash attach-site.sh your-real@email"
 
 step "1. Preflight"
 docker inspect "$NGINX_CTR" >/dev/null 2>&1 || die "container $NGINX_CTR not found"
 [ -f "$HATIM_COMPOSE" ] || die "$HATIM_COMPOSE not found"
 
-resolved=$(getent ahostsv4 "$DOMAIN" | awk '{print $1}' | sort -u | tr '\n' ' ')
-[ -n "$resolved" ] || die "$DOMAIN does not resolve yet. Add an A record in hPanel -> DNS Manager, then retry."
-# This box's addresses: its own interfaces, plus wherever the neighbours
-# resolve (they are served from here, whatever the interfaces say).
-ours=" $(hostname -I) $(getent ahostsv4 furnify.softech.agency | awk '{print $1}' | sort -u | tr '\n' ' ') "
+# This box's public address is wherever the neighbours resolve — they are
+# served from here, whatever the interfaces say.
+server_ips=$(resolve_v4 furnify.softech.agency)
+point_to=${server_ips:-"the server IPv4 address"}
+resolved=$(resolve_v4 "$DOMAIN")
+[ -n "$resolved" ] || die "$DOMAIN has no DNS record yet. In hPanel -> Domains -> DNS Manager for softech.agency,
+       add:  Type A   Name ${DOMAIN%%.softech.agency}   Points to $point_to
+       then wait until  dig +short $DOMAIN  prints that address, and run this again."
+ours=" $(hostname -I 2>/dev/null || true) $server_ips "
 for ip in $resolved; do
   case "$ours" in
     *" $ip "*) ;;

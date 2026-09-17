@@ -3,7 +3,7 @@
 # nginx config, no container, no other project's files. Safe to re-run; after
 # a `git pull` it refreshes the compose file and backup scripts.
 #
-#   bash bootstrap.sh you@example.com [travelar.softech.agency]
+#   bash bootstrap.sh your-real@email [travelar.softech.agency]
 #
 # The email becomes the platform operator's login (SUPER_ADMIN_EMAIL) and the
 # Let's Encrypt contact.
@@ -42,8 +42,12 @@ ok "docker-compose.yml and ops/backup in place"
 step "3. $ENV_FILE"
 if [ -f "$ENV_FILE" ]; then
   ok "already exists — left as is (DOMAIN=$(env_get DOMAIN))"
+  current=$(env_get SUPER_ADMIN_EMAIL)
+  is_placeholder_email "$current" && printf '\033[33m WARN\033[0m  %s\n' "$(placeholder_email_help "$current")"
 else
-  [ -n "$EMAIL" ] || die "usage: bash bootstrap.sh you@example.com [domain]  (the email is needed to create .env)"
+  [ -n "$EMAIL" ] || die "usage: bash bootstrap.sh your-real@email [domain]  (the email is needed to create .env)"
+  is_placeholder_email "$EMAIL" \
+    && die "$EMAIL is the example address. Use your own — it becomes the operator login and the Let's Encrypt contact."
   secret() { openssl rand -hex 32; }
   # Letters, digits and a symbol, so it passes any password rule.
   operator_password="Tv-$(openssl rand -hex 10)"

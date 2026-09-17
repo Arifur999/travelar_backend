@@ -23,6 +23,11 @@ load_domain
 for key in POSTGRES_PASSWORD BETTER_AUTH_SECRET ACCESS_TOKEN_SECRET REFRESH_TOKEN_SECRET SUPER_ADMIN_EMAIL SUPER_ADMIN_PASSWORD API_IMAGE WEB_IMAGE; do
   [ -n "$(env_get "$key")" ] || die "$key is empty in $ENV_FILE"
 done
+operator=$(env_get SUPER_ADMIN_EMAIL)
+if is_placeholder_email "$operator"; then
+  # Only matters before the first start, which creates the account from it.
+  docker inspect travelar-api >/dev/null 2>&1 || die "$(placeholder_email_help "$operator")"
+fi
 
 step "1. Scripts"
 # A copy that does not depend on the git clone staying where it is.
@@ -34,10 +39,25 @@ ok "installed into $LIB_DIR"
 
 step "2. First release"
 cd "$APP_DIR"
-if ! docker compose pull; then
-  die "could not pull the images. Has each repo's Deploy workflow finished once, and is each
-       package public? GitHub -> Packages -> travelar-api / travelar-web -> Package settings
-       -> Change visibility -> Public"
+# Retried: the image layers come from GitHub's blob storage, and a dropped
+# connection there fails the whole pull. Finished layers are kept between tries.
+pulled=0
+for attempt in 1 2 3; do
+  if docker compose pull; then pulled=1; break; fi
+  if [ "$attempt" -lt 3 ]; then
+    info "pull attempt $attempt failed — retrying in 20 s"
+    sleep 20
+  fi
+done
+if [ "$pulled" != 1 ]; then
+  die "could not pull the images after 3 attempts. Nothing was started. Read the error above:
+       * 'tls: first record does not look like a TLS handshake', 'connection reset' or a timeout
+         -> this server's connection to GitHub's package storage is failing. Check:
+              getent ahostsv4 pkg-containers.githubusercontent.com
+              curl -sS -o /dev/null -w '%{http_code}\n' https://pkg-containers.githubusercontent.com/
+              systemctl show docker -p Environment ; cat /etc/docker/daemon.json
+       * 'denied' or 'unauthorized'
+         -> the package is private: GitHub -> Packages -> travelar-api / travelar-web -> Package settings"
 fi
 # The agent does the rest: start, wait for health, report.
 bash "$LIB_DIR/agent/travelar-deploy.sh" || die "the stack did not become healthy — see the logs above"

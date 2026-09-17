@@ -35,6 +35,32 @@ die()  { printf '\033[31m FAIL\033[0m  %s\n' "$1" >&2; exit 1; }
 
 require_root() { [ "$(id -u)" -eq 0 ] || die "run as root"; }
 
+# resolve_v4 NAME — its IPv4 addresses, space separated; empty when it has none.
+# Never fails: getent exits 2 for an unknown name, and under `set -e -o pipefail`
+# that used to end attach-site.sh silently instead of saying what was wrong.
+resolve_v4() {
+  { getent ahostsv4 "$1" || true; } | awk '{print $1}' | sort -u | tr '\n' ' ' | sed 's/ $//'
+}
+
+# The examples in the docs and messages, which must never become a real login
+# or the Let's Encrypt contact.
+is_placeholder_email() {
+  case "$1" in
+    your@email.com|you@example.com|*@example.com|*@example.org|*@example.net) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# The fix for a placeholder operator email. It only works before the API's
+# first boot, which is when the operator account is created from it.
+placeholder_email_help() {
+  cat <<EOF
+SUPER_ADMIN_EMAIL in $ENV_FILE is still the example address ($1).
+       It becomes the operator login on the API's first start, so set yours first:
+         sed -i 's|^SUPER_ADMIN_EMAIL=.*|SUPER_ADMIN_EMAIL=you@yourdomain|' $ENV_FILE
+EOF
+}
+
 # env_get KEY — a value from /opt/travelar/.env, surrounding quotes removed.
 # Read, never sourced: values such as BACKUP_SCHEDULE contain spaces and globs.
 env_get() {
