@@ -24,7 +24,7 @@ CI runs `generate → lint → typecheck → test` against a Postgres service co
 
 `docker-compose.yaml` is only the dev database. `docker-compose.production.yaml` runs the whole stack (db → migrate → api → web) and builds the web app from `../travel_agency`.
 
-**Production** is `travelar.softech.agency` on a shared VPS (`deploy/README.md`).
+**Production** is `travance.softech.agency` on a shared VPS (`deploy/README.md`).
 - **Release path:** a push to `main` runs `Deploy`, which uses CI as its quality gate and then pushes `ghcr.io/arifur999/travelar-api`. A timer on the server pulls the image, migrates, and rolls back when the release is not healthy. The web repo publishes `travelar-web` the same way.
 - **Migrations must be additive.** A rollback restores the image but not the schema, and the two repos release independently.
 - **`deploy/` scripts run next to other live sites.** Keep their safeguards:

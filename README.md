@@ -22,7 +22,7 @@ pnpm dev                      # API on http://localhost:5050
 
 ## Live site and releases
 
-Production runs at **travelar.softech.agency**, on the same VPS as two other
+Production runs at **travance.softech.agency**, on the same VPS as two other
 live sites. A push to `main` goes live only through this path:
 
 1. The `Deploy` workflow runs CI (lint, typecheck, integration tests).

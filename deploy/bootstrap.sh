@@ -3,7 +3,7 @@
 # nginx config, no container, no other project's files. Safe to re-run; after
 # a `git pull` it refreshes the compose file and backup scripts.
 #
-#   bash bootstrap.sh your-real@email [travelar.softech.agency]
+#   bash bootstrap.sh your-real@email [travance.softech.agency]
 #
 # The email becomes the platform operator's login (SUPER_ADMIN_EMAIL) and the
 # Let's Encrypt contact.
@@ -14,7 +14,7 @@ REPO="$(cd "$SRC/.." && pwd)"
 . "$SRC/lib.sh"
 
 EMAIL="${1:-}"
-DOMAIN_ARG="${2:-travelar.softech.agency}"
+DOMAIN_ARG="${2:-travance.softech.agency}"
 
 require_root
 

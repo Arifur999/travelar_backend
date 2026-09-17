@@ -1,6 +1,6 @@
 # Deploying Travelar to srv1881651
 
-Target: `travelar.softech.agency` on the Hostinger VPS (Ubuntu 24.04, KVM 2,
+Target: `travance.softech.agency` on the Hostinger VPS (Ubuntu 24.04, KVM 2,
 8 GB), beside `softech.agency` and `furnify.softech.agency`, which must keep
 running untouched.
 
@@ -38,7 +38,7 @@ additive** (new tables, nullable or defaulted columns).
                           |
             hatim_backend-nginx-1   (furnify's proxy, shared)
      |                    |                               |
- furnify...        softech.agency              travelar.softech.agency
+ furnify...        softech.agency              travance.softech.agency
                                          /api/v1/billing/sslcommerz/*   everything else
                                                   |                          |
                                             travelar-api:5050        travelar-web:3000
@@ -61,18 +61,18 @@ additive** (new tables, nullable or defaulted columns).
   about 300 MB (API 173, web 72, db 57). Disk: about 1.2 GB for the two
   images.
 - **Our own vhost file.** It lives at
-  `/opt/travelar/nginx/travelar.softech.agency.conf` and is bind mounted into
+  `/opt/travelar/nginx/travance.softech.agency.conf` and is bind mounted into
   the proxy's `conf.d`. It is never appended to furnify's `nginx.conf`, which
   furnify's deploy rewrites.
 
 ## First-time setup
 
 **1. DNS.** In hPanel → Domains → DNS Manager, add an `A` record: name
-`travelar`, value `187.127.124.251` (the address `softech.agency` resolves
+`travance`, value `187.127.124.251` (the address `softech.agency` resolves
 to). Leave every other record alone. Wait until this prints that address:
 
 ```bash
-dig +short travelar.softech.agency
+dig +short travance.softech.agency
 ```
 
 **2. Images.** Each repo's *Deploy* workflow publishes its image on every
@@ -104,7 +104,7 @@ to re-run.
 - It compares `softech.agency` and `furnify` before and after, and withdraws
   its own block if either changed.
 
-**4. Sign in** at `https://travelar.softech.agency/login` with
+**4. Sign in** at `https://travance.softech.agency/login` with
 `SUPER_ADMIN_EMAIL` and the generated password:
 
 ```bash
@@ -114,9 +114,9 @@ grep SUPER_ADMIN_PASSWORD /opt/travelar/.env
 **5. Check from anywhere:**
 
 ```bash
-curl -sI https://travelar.softech.agency/login | head -1
-echo | openssl s_client -connect travelar.softech.agency:443 \
-  -servername travelar.softech.agency 2>/dev/null | openssl x509 -noout -subject
+curl -sI https://travance.softech.agency/login | head -1
+echo | openssl s_client -connect travance.softech.agency:443 \
+  -servername travance.softech.agency 2>/dev/null | openssl x509 -noout -subject
 for d in softech.agency furnify.softech.agency; do
   curl -s -o /dev/null -w "$d -> %{http_code}\n" "https://$d/"
 done
@@ -133,7 +133,7 @@ it is better if that never happens. Add this line to the nginx service's
 line, and commit it:
 
 ```yaml
-- /opt/travelar/nginx/travelar.softech.agency.conf:/etc/nginx/conf.d/travelar.softech.agency.conf:ro
+- /opt/travelar/nginx/travance.softech.agency.conf:/etc/nginx/conf.d/travance.softech.agency.conf:ro
 ```
 
 ## Operations
@@ -160,6 +160,12 @@ docker logs travelar-api | jq 'select(.requestId == "<id>")'
 
 # after changing /opt/travelar/.env
 cd /opt/travelar && docker compose up -d
+
+# move to another public name (its A record must already point here)
+read -rp "New public name: " D && sed -i "s|^DOMAIN=.*|DOMAIN=$D|" /opt/travelar/.env
+cd /opt/travelar && docker compose up -d        # apps now build URLs for the new name
+bash /root/travelar-src/deploy/attach-site.sh   # certificate + vhost for it
+# a previously attached name keeps its vhost file and mount line until removed by hand
 
 # update the scripts or the compose file after they change in git
 cd /root/travelar-src && git pull
