@@ -278,6 +278,17 @@ const getCashFlow = async (agencyId: string) => {
   const netInvestment = invested - withdrawn;
 
   return {
+    /// Each account's share of accountBalance, largest first. Inactive accounts
+    /// are included: money sitting in one is still the agency's money.
+    accounts: balances
+      .map((account) => ({
+        id: account.id,
+        name: account.name,
+        category: account.category,
+        isActive: account.isActive,
+        balance: account.currentBalance,
+      }))
+      .sort((a, b) => b.balance - a.balance),
     accountBalance,
     customerDue,
     totalAssets,
@@ -291,18 +302,67 @@ const getCashFlow = async (agencyId: string) => {
   };
 };
 
-/** Headline figures for the landing dashboard. */
+/**
+ * Sales, profit and expenses for the last `count` calendar months, oldest
+ * first, the current month included (to date).
+ *
+ * A rolling window rather than the calendar year: in January a year-to-date
+ * chart would be one bar. Each month goes through getSalesAndProfit, the same
+ * function every other view uses, so the landing chart can never disagree with
+ * the Reports page about what a month's profit was — that costs four small
+ * indexed aggregates per month, which is the right trade for one definition.
+ */
+const getRecentMonths = async (agencyId: string, count: number, now = new Date()) => {
+  const months = Array.from({ length: count }, (_, index) => {
+    const start = new Date(now.getFullYear(), now.getMonth() - (count - 1 - index), 1);
+    const isCurrent = index === count - 1;
+    return {
+      from: start,
+      to: isCurrent ? endOfDay(now) : endOfDay(new Date(start.getFullYear(), start.getMonth() + 1, 0)),
+    };
+  });
+
+  return Promise.all(
+    months.map(async ({ from, to }) => {
+      const [sales, expenses] = await Promise.all([
+        getSalesAndProfit(agencyId, { from, to }),
+        prisma.expense.aggregate({ where: { agencyId, date: { gte: from, lte: to } }, _sum: { amount: true } }),
+      ]);
+
+      return {
+        year: from.getFullYear(),
+        month: from.getMonth() + 1,
+        sales: sales.actualSales,
+        profit: sales.actualProfit,
+        expenses: toNumber(expenses._sum.amount),
+      };
+    }),
+  );
+};
+
+/** How many months the landing trend covers. */
+export const SUMMARY_TREND_MONTHS = 6;
+
+/**
+ * Headline figures for the landing dashboard.
+ *
+ * This is a base feature, served to every plan. It is deliberately a fixed,
+ * short view — this month, the current cash position and a six-month trend.
+ * Custom ranges, whole years and month-by-month goal tables stay behind the
+ * REPORTS feature.
+ */
 const getSummary = async (agencyId: string) => {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth(), 1);
   const to = endOfDay(now);
 
-  const [overview, cashFlow] = await Promise.all([
+  const [overview, cashFlow, trend] = await Promise.all([
     getOverview(agencyId, { from, to }),
     getCashFlow(agencyId),
+    getRecentMonths(agencyId, SUMMARY_TREND_MONTHS, now),
   ]);
 
-  return { thisMonth: overview, cashFlow };
+  return { thisMonth: overview, cashFlow, trend };
 };
 
 /* --------------------------------- goals -------------------------------- */
@@ -334,6 +394,7 @@ export const DashboardService = {
   getOverview,
   getMonthlyBreakdown,
   getCashFlow,
+  getRecentMonths,
   getSummary,
   upsertGoal,
   getGoalsForYear,
