@@ -35,8 +35,12 @@ if [ -f "$APP_DIR/docker-compose.yml" ] && ! cmp -s "$SRC/docker-compose.yml" "$
   info "compose file changed — previous one kept as a .bak"
 fi
 cp "$SRC/docker-compose.yml" "$APP_DIR/docker-compose.yml"
-rm -rf "$APP_DIR/ops/backup"
-cp -r "$REPO/ops/backup" "$APP_DIR/ops/backup"
+mkdir -p "$APP_DIR/ops/backup"
+# File by file into the existing folder, never by replacing the folder: the
+# backup container bind-mounts it, and a replaced folder is a new inode the
+# running container would never see.
+cp -f "$REPO"/ops/backup/* "$APP_DIR/ops/backup/"
+chmod 0755 "$APP_DIR"/ops/backup/*.sh
 ok "docker-compose.yml and ops/backup in place"
 
 step "3. $ENV_FILE"

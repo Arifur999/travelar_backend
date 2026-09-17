@@ -61,6 +61,19 @@ if [ "$pulled" != 1 ]; then
 fi
 # The agent does the rest: start, wait for health, report.
 bash "$LIB_DIR/agent/travelar-deploy.sh" || die "the stack did not become healthy — see the logs above"
+
+# The release agent only watches the two containers that serve traffic. A
+# backup job stuck restarting would otherwise go unnoticed until the day a
+# backup is needed.
+sleep 5
+backup_state=$(docker inspect -f '{{.State.Status}} (restarts: {{.RestartCount}})' travelar-backup 2>/dev/null || echo missing)
+case "$backup_state" in
+  "running (restarts: 0)") ok "travelar-backup running" ;;
+  *)
+    printf '\033[33m WARN\033[0m  travelar-backup is %s — no backups are being taken. Its log:\n' "$backup_state"
+    docker logs --tail 10 travelar-backup 2>&1 | sed 's/^/        /'
+    ;;
+esac
 docker ps --filter name=travelar- --format '     {{.Names}}  {{.Status}}'
 
 step "3. Timers"

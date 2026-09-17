@@ -17,12 +17,15 @@ env_file=/tmp/backup.env
 } > "$env_file"
 chmod 600 "$env_file"
 
-echo "$SCHEDULE . $env_file && /ops/backup.sh > /proc/1/fd/1 2>/proc/1/fd/2" > /etc/crontabs/root
+# Run through `sh`, never directly. /ops is a read-only bind mount of a git
+# checkout, and on Linux a checkout without the executable bit made every
+# start die with "Permission denied" (exit 126) and no backup ever taken.
+echo "$SCHEDULE . $env_file && sh /ops/backup.sh > /proc/1/fd/1 2>/proc/1/fd/2" > /etc/crontabs/root
 
 echo "[backup] waiting for the database"
 until pg_isready -q; do sleep 2; done
 
-/ops/backup.sh
+sh /ops/backup.sh
 
 echo "[backup] scheduled: $SCHEDULE (UTC)"
 exec crond -f -l 8
