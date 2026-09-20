@@ -107,6 +107,45 @@ describe("landing summary", () => {
     expect(trend.every((m: { sales: number; profit: number; expenses: number }) => m.sales === 0 && m.profit === 0 && m.expenses === 0)).toBe(true);
   });
 
+  it("reports what a new agency still has to set up", async () => {
+    const owner = await t.api.registerAgency("Setup");
+
+    const fresh = await t.api.ok("GET", "/dashboard/summary", undefined, owner);
+    expect(fresh.setup).toEqual({ hasCashAccount: false, hasCustomer: false, hasSale: false });
+
+    await t.api.ok("POST", "/accounts", { name: "Cash Box", openingBalance: 1000 }, owner);
+    const customer = await t.api.ok("POST", "/customers", { name: "First Customer", phone: "01799999999" }, owner);
+    expect((await t.api.ok("GET", "/dashboard/summary", undefined, owner)).setup).toEqual({
+      hasCashAccount: true,
+      hasCustomer: true,
+      hasSale: false,
+    });
+
+    // Any module counts as a first sale — here a visa case, not a ticket.
+    await t.api.ok(
+      "POST",
+      "/visa",
+      { customerId: customer.id, country: "Malaysia", visaType: "Tourist", serviceFee: 1500 },
+      owner,
+    );
+    expect((await t.api.ok("GET", "/dashboard/summary", undefined, owner)).setup.hasSale).toBe(true);
+  });
+
+  it("counts a sale from an earlier month, not just this one", async () => {
+    const owner = await t.api.registerAgency("Setup old");
+    const customer = await t.api.ok("POST", "/customers", { name: "Old Buyer", phone: "01788888888" }, owner);
+    await t.api.ok(
+      "POST",
+      "/ticketing",
+      { customerId: customer.id, passengerName: "Pax Old", pnr: "SETOLD", fare: 5000, cost: 4000, issueDate: monthsAgo(4) },
+      owner,
+    );
+
+    const summary = await t.api.ok("GET", "/dashboard/summary", undefined, owner);
+    expect(summary.thisMonth.actualSales).toBe(0);
+    expect(summary.setup.hasSale).toBe(true);
+  });
+
   it("lets staff read it too", async () => {
     const owner = await t.api.registerAgency("Staff summary");
     const email = `staff-summary-${Date.now()}@example.test`;

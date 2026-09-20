@@ -344,6 +344,34 @@ const getRecentMonths = async (agencyId: string, count: number, now = new Date()
 export const SUMMARY_TREND_MONTHS = 6;
 
 /**
+ * What a new agency still has to do before any of the figures mean anything.
+ *
+ * Existence, not counts: `findFirst` on an indexed column stops at the first
+ * row, so this stays cheap for an agency with fifty thousand tickets. A sale
+ * from any year counts — the landing page asks "have you started?", not "what
+ * happened this month".
+ */
+const getSetupProgress = async (agencyId: string) => {
+  const live = { agencyId, isDeleted: false };
+  const id = { select: { id: true } };
+
+  const [cashAccount, customer, ticket, visaCase, hajjBooking] = await Promise.all([
+    prisma.cashAccount.findFirst({ where: live, ...id }),
+    prisma.customer.findFirst({ where: live, ...id }),
+    prisma.ticket.findFirst({ where: live, ...id }),
+    prisma.visaCase.findFirst({ where: live, ...id }),
+    prisma.hajjBooking.findFirst({ where: live, ...id }),
+  ]);
+
+  return {
+    hasCashAccount: cashAccount !== null,
+    hasCustomer: customer !== null,
+    /// Any module counts: an agency that only sells visas is set up.
+    hasSale: ticket !== null || visaCase !== null || hajjBooking !== null,
+  };
+};
+
+/**
  * Headline figures for the landing dashboard.
  *
  * This is a base feature, served to every plan. It is deliberately a fixed,
@@ -356,13 +384,14 @@ const getSummary = async (agencyId: string) => {
   const from = new Date(now.getFullYear(), now.getMonth(), 1);
   const to = endOfDay(now);
 
-  const [overview, cashFlow, trend] = await Promise.all([
+  const [overview, cashFlow, trend, setup] = await Promise.all([
     getOverview(agencyId, { from, to }),
     getCashFlow(agencyId),
     getRecentMonths(agencyId, SUMMARY_TREND_MONTHS, now),
+    getSetupProgress(agencyId),
   ]);
 
-  return { thisMonth: overview, cashFlow, trend };
+  return { thisMonth: overview, cashFlow, trend, setup };
 };
 
 /* --------------------------------- goals -------------------------------- */
