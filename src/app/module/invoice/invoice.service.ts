@@ -1,9 +1,14 @@
 import status from "http-status";
-import { HajjBookingStatus, TourBookingStatus } from "../../../generated/prisma/enums.js";
+import {
+  HajjBookingStatus,
+  HotelBookingStatus,
+  TourBookingStatus,
+} from "../../../generated/prisma/enums.js";
 import AppError from "../../errorHelpers/AppError.js";
 import { prisma } from "../../lib/prisma.js";
 import { PostingService } from "../cashAccount/posting.service.js";
 import { HajjBookingService } from "../hajj/hajjBooking.service.js";
+import { HotelService } from "../hotel/hotel.service.js";
 import { TicketService } from "../ticket/ticket.service.js";
 import { TourBookingService } from "../tour/tourBooking.service.js";
 import { VisaService } from "../visa/visa.service.js";
@@ -11,6 +16,7 @@ import {
   HAJJ_BOOKING_STATUS_LABELS,
   HAJJ_PACKAGE_TYPE_LABELS,
   HAJJ_TIER_LABELS,
+  HOTEL_BOOKING_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
   TICKET_STATUS_LABELS,
   TOUR_BOOKING_STATUS_LABELS,
@@ -252,11 +258,63 @@ const buildTourInvoice = async (agencyId: string, id: string): Promise<IInvoiceD
   };
 };
 
+/* ---------------------------------- hotel --------------------------------- */
+
+const buildHotelInvoice = async (agencyId: string, id: string): Promise<IInvoiceDocument> => {
+  const booking = await HotelService.getBookingById(agencyId, id);
+  const { agency, customer } = await loadParties(agencyId, booking.customerId);
+
+  const cancelled = booking.status === HotelBookingStatus.CANCELLED;
+  // Already numbers: HotelService.decorate converts them.
+  const sellAmount = booking.sellAmount;
+  const nights = booking.nights === 1 ? "1 night" : `${booking.nights} nights`;
+  const rooms = booking.rooms === 1 ? "1 room" : `${booking.rooms} rooms`;
+
+  const lines = [
+    {
+      description: `${booking.hotelName}, ${booking.city} — ${rooms}, ${nights}`,
+      amount: sellAmount,
+    },
+  ];
+
+  // A cancelled stay bills nothing — the rule the customer's balance and
+  // statement already follow — so it is cancelled out here too.
+  if (cancelled) lines.push({ description: "Booking cancelled", amount: -sellAmount });
+  const total = cancelled ? 0 : sellAmount;
+
+  return {
+    number: invoiceNumber("HTL", booking.id),
+    kind: "Hotel booking",
+    status: HOTEL_BOOKING_STATUS_LABELS[booking.status],
+    issuedAt: booking.createdAt,
+    agency,
+    customer,
+    details: [
+      { label: "Guest", value: booking.guestName },
+      { label: "Hotel", value: booking.hotelName },
+      { label: "City", value: [booking.city, booking.country].filter(Boolean).join(", ") },
+      { label: "Room type", value: booking.roomType },
+      { label: "Check-in", value: formatDay(booking.checkIn) },
+      { label: "Check-out", value: formatDay(booking.checkOut) },
+      { label: "Confirmation", value: booking.confirmationNo },
+    ],
+    lines,
+    payments: toPayments(booking.payments),
+    total,
+    paid: booking.totalPaid,
+    due: total - booking.totalPaid,
+    note: cancelled
+      ? "This booking was cancelled, so nothing is payable. Payments received against it are held as credit for the customer."
+      : null,
+  };
+};
+
 const BUILDERS = {
   ticket: buildTicketInvoice,
   visa: buildVisaInvoice,
   hajj: buildHajjInvoice,
   tour: buildTourInvoice,
+  hotel: buildHotelInvoice,
 } as const;
 
 export type InvoiceKind = keyof typeof BUILDERS;
@@ -274,4 +332,5 @@ export const InvoiceService = {
   buildVisaInvoice,
   buildHajjInvoice,
   buildTourInvoice,
+  buildHotelInvoice,
 };

@@ -41,6 +41,7 @@ export const LOCKABLE_ROWS = {
   visaCase: { table: "visa_cases", notFound: "Visa case not found" },
   hajjBooking: { table: "hajj_bookings", notFound: "Booking not found" },
   tourBooking: { table: "tour_bookings", notFound: "Booking not found" },
+  hotelBooking: { table: "hotel_bookings", notFound: "Booking not found" },
 } as const;
 
 export type LockableRow = keyof typeof LOCKABLE_ROWS;

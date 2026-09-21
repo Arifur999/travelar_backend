@@ -1,0 +1,117 @@
+/// One hotel stay sold to a customer.
+///
+/// There is no hotel master list and no supplier link. A stay is booked at a
+/// named property through whoever had the rate that day, and the agency needs
+/// the name on the voucher, not a second master list to maintain. A supplier
+/// relation would be worse than nothing: the supplier ledger derives what is
+/// payable from ticket costs alone, so a hotel pointing at a supplier would
+/// promise a payable that nothing counts.
+model HotelBooking {
+  id             String               @id @default(uuid(7))
+
+  agencyId       String
+  agency         Agency               @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  customerId     String
+  customer       Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  hotelName      String
+  city           String
+  country        String?
+  /// Who the rate came from — a chain, a consolidator, a walk-in rate. Free
+  /// text on purpose; see the note above.
+  bookedThrough  String?
+  confirmationNo String?
+
+  guestName      String
+  checkIn        DateTime
+  checkOut       DateTime
+  /// Rooms held, and heads in them. Nights are the gap between the dates, so
+  /// they are computed rather than stored — two figures for one fact drift.
+  rooms          Int                  @default(1)
+  guests         Int                  @default(1)
+  roomType       String?
+
+  /// Totals for the whole stay, snapshotted when it is booked. Totals rather
+  /// than a nightly rate for the same reason tours store them: every figure
+  /// the app reports is a SUM over these columns, and SQL cannot sum a product
+  /// of a rate and a night count.
+  sellAmount     Decimal              @db.Decimal(12, 2)
+  costAmount     Decimal              @db.Decimal(12, 2) @default(0)
+
+  status         HotelBookingStatus   @default(RESERVED)
+  note           String?              @db.Text
+
+  createdById    String?
+
+  isDeleted      Boolean              @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  payments       HotelPayment[]
+  statusHistory  HotelStatusHistory[]
+
+  @@index([agencyId])
+  @@index([agencyId, isDeleted])
+  @@index([agencyId, status])
+  @@index([agencyId, checkIn])
+  @@index([customerId])
+  @@index([agencyId, isDeleted, createdAt])
+  @@map("hotel_bookings")
+}
+
+model HotelPayment {
+  id            String        @id @default(uuid(7))
+
+  agencyId      String
+  bookingId     String
+  booking       HotelBooking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod @default(CASH)
+
+  /// Where the money landed. Null when the payment came out of the
+  /// customer's own balance: that cash arrived when they paid it in, and
+  /// posting it again would count the same money twice.
+  cashAccountId String?
+  cashAccount   CashAccount?  @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  /// Settled from what the customer had already paid in, rather than with
+  /// money arriving now. Such a payment posts to no account and does not
+  /// change what the customer owes overall — see customer.service.ts.
+  fromWallet    Boolean       @default(false)
+
+  reference     String?
+  note          String?       @db.Text
+  paidAt        DateTime      @default(now())
+
+  recordedById  String?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([bookingId])
+  @@index([agencyId])
+  @@index([cashAccountId])
+  @@map("hotel_payments")
+}
+
+model HotelStatusHistory {
+  id          String              @id @default(uuid(7))
+
+  agencyId    String
+  bookingId   String
+  booking     HotelBooking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  fromStatus  HotelBookingStatus?
+  toStatus    HotelBookingStatus
+  note        String?             @db.Text
+
+  changedById String?
+  changedAt   DateTime            @default(now())
+
+  @@index([bookingId])
+  @@index([agencyId])
+  @@map("hotel_status_history")
+}

@@ -28,6 +28,7 @@ const LIST_INDEXES = [
   "hajj_bookings_agencyId_isDeleted_createdAt_idx",
   "tour_bookings_agencyId_isDeleted_createdAt_idx",
   "tour_packages_agencyId_isDeleted_createdAt_idx",
+  "hotel_bookings_agencyId_isDeleted_createdAt_idx",
   "customers_agencyId_isDeleted_createdAt_idx",
   "employees_agencyId_isDeleted_createdAt_idx",
   "suppliers_agencyId_isDeleted_createdAt_idx",

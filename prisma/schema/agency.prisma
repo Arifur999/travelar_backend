@@ -30,6 +30,7 @@ model Agency {
   payments            Payment[]
   hajjPackages        HajjPackage[]
   tourPackages        TourPackage[]
+  hotelBookings       HotelBooking[]
 
   cashAccounts         CashAccount[]
   accountPostings      AccountPosting[]

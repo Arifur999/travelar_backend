@@ -2,6 +2,7 @@ import {
   HajjBookingStatus,
   HajjPackageType,
   HajjTier,
+  HotelBookingStatus,
   PaymentMethod,
   TicketStatus,
   TourBookingStatus,
@@ -57,6 +58,13 @@ export const HAJJ_TIER_LABELS: Record<HajjTier, string> = {
 };
 
 export const TOUR_BOOKING_STATUS_LABELS: Record<TourBookingStatus, string> = {
+  RESERVED: "Reserved",
+  CONFIRMED: "Confirmed",
+  CANCELLED: "Cancelled",
+  COMPLETED: "Completed",
+};
+
+export const HOTEL_BOOKING_STATUS_LABELS: Record<HotelBookingStatus, string> = {
   RESERVED: "Reserved",
   CONFIRMED: "Confirmed",
   CANCELLED: "Cancelled",

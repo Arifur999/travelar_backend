@@ -24,6 +24,7 @@ model Customer {
   visaCases     VisaCase[]
   hajjBookings  HajjBooking[]
   tourBookings  TourBooking[]
+  hotelBookings HotelBooking[]
   dueReceived   DueReceived[]
 
   @@index([agencyId])

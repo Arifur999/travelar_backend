@@ -39,6 +39,7 @@ model CashAccount {
   visaPayments      VisaPayment[]
   hajjPayments      HajjPayment[]
   tourPayments      TourPayment[]
+  hotelPayments     HotelPayment[]
 
   /// A soft-deleted account keeps its name reserved on purpose — two accounts
   /// with the same name, one deleted, would make an audit trail ambiguous.

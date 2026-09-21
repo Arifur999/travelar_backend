@@ -1,6 +1,7 @@
 import { Prisma } from "../../../generated/prisma/client.js";
 import {
   HajjBookingStatus,
+  HotelBookingStatus,
   PostingSource,
   TourBookingStatus,
 } from "../../../generated/prisma/enums.js";
@@ -32,10 +33,10 @@ export const endOfDay = (date: Date) => {
  *  - Hajj bookings record a selling price but no cost, so no profit can be
  *    derived from them. Their revenue counts; their margin is reported as null
  *    rather than silently assumed to be the whole package price.
- *  - Tours record both sides, so their margin is real.
+ *  - Tours and hotels record both sides, so their margins are real.
  */
 const getSalesAndProfit = async (agencyId: string, period: IPeriod) => {
-  const [tickets, visaCases, hajjBookings, tourBookings] = await Promise.all([
+  const [tickets, visaCases, hajjBookings, tourBookings, hotelBookings] = await Promise.all([
     prisma.ticket.aggregate({
       where: { agencyId, isDeleted: false, issueDate: { gte: period.from, lte: period.to } },
       _sum: { fare: true, dateChangeFee: true, refundAmount: true, profit: true },
@@ -66,6 +67,16 @@ const getSalesAndProfit = async (agencyId: string, period: IPeriod) => {
       _sum: { sellAmount: true, costAmount: true },
       _count: { _all: true },
     }),
+    prisma.hotelBooking.aggregate({
+      where: {
+        agencyId,
+        isDeleted: false,
+        status: { not: HotelBookingStatus.CANCELLED },
+        createdAt: { gte: period.from, lte: period.to },
+      },
+      _sum: { sellAmount: true, costAmount: true },
+      _count: { _all: true },
+    }),
   ]);
 
   const ticketSales =
@@ -75,19 +86,22 @@ const getSalesAndProfit = async (agencyId: string, period: IPeriod) => {
   const visaSales = toNumber(visaCases._sum.serviceFee) + toNumber(visaCases._sum.embassyFee);
   const hajjSales = toNumber(hajjBookings._sum.packagePrice);
   const tourSales = toNumber(tourBookings._sum.sellAmount);
+  const hotelSales = toNumber(hotelBookings._sum.sellAmount);
 
   const ticketProfit = toNumber(tickets._sum.profit);
   const visaProfit = toNumber(visaCases._sum.serviceFee);
   const tourProfit = tourSales - toNumber(tourBookings._sum.costAmount);
+  const hotelProfit = hotelSales - toNumber(hotelBookings._sum.costAmount);
 
   return {
-    actualSales: ticketSales + visaSales + hajjSales + tourSales,
-    actualProfit: ticketProfit + visaProfit + tourProfit,
+    actualSales: ticketSales + visaSales + hajjSales + tourSales + hotelSales,
+    actualProfit: ticketProfit + visaProfit + tourProfit + hotelProfit,
     byModule: {
       ticketing: { count: tickets._count._all, sales: ticketSales, profit: ticketProfit },
       visa: { count: visaCases._count._all, sales: visaSales, profit: visaProfit },
       hajj: { count: hajjBookings._count._all, sales: hajjSales, profit: null },
       tours: { count: tourBookings._count._all, sales: tourSales, profit: tourProfit },
+      hotels: { count: hotelBookings._count._all, sales: hotelSales, profit: hotelProfit },
     },
   };
 };
@@ -373,13 +387,15 @@ const getSetupProgress = async (agencyId: string) => {
   const live = { agencyId, isDeleted: false };
   const id = { select: { id: true } };
 
-  const [cashAccount, customer, ticket, visaCase, hajjBooking, tourBooking] = await Promise.all([
+  const [cashAccount, customer, ticket, visaCase, hajjBooking, tourBooking, hotelBooking] =
+    await Promise.all([
     prisma.cashAccount.findFirst({ where: live, ...id }),
     prisma.customer.findFirst({ where: live, ...id }),
     prisma.ticket.findFirst({ where: live, ...id }),
     prisma.visaCase.findFirst({ where: live, ...id }),
     prisma.hajjBooking.findFirst({ where: live, ...id }),
     prisma.tourBooking.findFirst({ where: live, ...id }),
+    prisma.hotelBooking.findFirst({ where: live, ...id }),
   ]);
 
   return {
@@ -387,7 +403,11 @@ const getSetupProgress = async (agencyId: string) => {
     hasCustomer: customer !== null,
     /// Any module counts: an agency that only sells visas is set up.
     hasSale:
-      ticket !== null || visaCase !== null || hajjBooking !== null || tourBooking !== null,
+      ticket !== null ||
+      visaCase !== null ||
+      hajjBooking !== null ||
+      tourBooking !== null ||
+      hotelBooking !== null,
   };
 };
 
