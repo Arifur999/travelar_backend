@@ -162,9 +162,16 @@ model HajjPayment {
   amount         Decimal       @db.Decimal(12, 2)
   method         PaymentMethod @default(CASH)
 
-  /// Money collected on a pilgrim booking lands in a real account.
-  cashAccountId  String
-  cashAccount    CashAccount   @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  /// Where the money landed. Null when the payment came out of the
+  /// customer's own balance: that cash arrived when they paid it in, and
+  /// posting it again would count the same money twice.
+  cashAccountId  String?
+  cashAccount    CashAccount?  @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  /// Settled from what the customer had already paid in, rather than with
+  /// money arriving now. Such a payment posts to no account and does not
+  /// change what the customer owes overall — see customer.service.ts.
+  fromWallet     Boolean       @default(false)
 
   transactionRef String?
   note           String?       @db.Text

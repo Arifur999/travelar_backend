@@ -56,14 +56,17 @@ type PaymentRow = {
   paidAt: Date;
   method: keyof typeof PAYMENT_METHOD_LABELS;
   amount: Parameters<typeof toNumber>[0];
-  cashAccount: { name: string };
+  /// Null when the payment was settled from what the customer had already paid
+  /// in: no account received it now.
+  cashAccount: { name: string } | null;
+  fromWallet?: boolean;
 };
 
 const toPayments = (payments: (PaymentRow & { reference?: string | null; transactionRef?: string | null })[]) =>
   payments.map((payment) => ({
     date: payment.paidAt,
     method: PAYMENT_METHOD_LABELS[payment.method],
-    account: payment.cashAccount.name,
+    account: payment.fromWallet ? "Customer balance" : (payment.cashAccount?.name ?? "—"),
     reference: payment.reference ?? payment.transactionRef ?? null,
     amount: toNumber(payment.amount),
   }));

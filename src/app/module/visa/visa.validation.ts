@@ -31,7 +31,10 @@ const setDocumentStatusZodSchema = z.object({
 });
 
 const recordPaymentZodSchema = z.object({
-  cashAccountId: z.uuid("A valid account is required"),
+  // Optional only because a wallet payment has no account; the service
+  // refuses a payment that has neither.
+  cashAccountId: z.uuid("A valid account is required").optional(),
+  fromWallet: z.boolean().optional(),
   amount: z.coerce.number("Amount is required").positive("Amount must be greater than zero"),
   method: z.enum(METHODS, "Invalid payment method").optional(),
   reference: z.string().max(120).optional(),

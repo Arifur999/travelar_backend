@@ -21,6 +21,7 @@ import { SupportRoutes, adminSupportRouter } from "../module/support/support.rou
 import { TeamRoutes } from "../module/team/team.route.js";
 import { TicketRoutes } from "../module/ticket/ticket.route.js";
 import { VisaRoutes } from "../module/visa/visa.route.js";
+import { WalletRoutes } from "../module/wallet/wallet.route.js";
 
 const router = Router();
 
@@ -32,6 +33,7 @@ router.use("/balance-transfers", BalanceTransferRoutes);
 router.use("/suppliers", SupplierRoutes);
 router.use("/supplier-transactions", SupplierTransactionRoutes);
 router.use("/customers", CustomerRoutes);
+router.use("/wallet", WalletRoutes);
 router.use("/due-received", DueReceivedRoutes);
 router.use("/airlines", AirlineMasterRoutes);
 router.use("/routes-master", RouteMasterRoutes);

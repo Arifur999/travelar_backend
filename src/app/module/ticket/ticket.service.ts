@@ -11,6 +11,7 @@ import { IqueryParams } from "../../interfaces/query.interface.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import { QueryBuilder } from "../../utils/QueryBuilder.js";
 import { PostingService } from "../cashAccount/posting.service.js";
+import { WalletService } from "../wallet/wallet.service.js";
 import { lockRow } from "../../utils/rowLock.js";
 import {
   TICKET_TRANSITIONS,
@@ -379,17 +380,46 @@ const recordPayment = async (
   user: IRequestUser,
 ) => {
   const paidAt = payload.paidAt ? new Date(payload.paidAt) : new Date();
+  const fromWallet = payload.fromWallet === true;
+
+  if (!fromWallet && !payload.cashAccountId) {
+    throw new AppError(status.BAD_REQUEST, "Choose the account the money went into");
+  }
+
+  // Which wallet to lock has to be known before the transaction opens, because
+  // the customer is locked before the ticket (rowLock.ts). An edit could move
+  // the ticket to another customer in between, so it is checked again below.
+  const owner = fromWallet
+    ? await prisma.ticket.findFirst({
+        where: { id: ticketId, agencyId, isDeleted: false },
+        select: { customerId: true },
+      })
+    : null;
+  if (fromWallet && !owner) throw new AppError(status.NOT_FOUND, "Ticket not found");
 
   await prisma.$transaction(async (tx) => {
-    // First, so simultaneous payments for this ticket queue instead of each
-    // summing the same total and all being allowed through. See rowLock.ts.
+    if (owner) await lockRow(tx, "customer", owner.customerId, agencyId);
+
+    // So simultaneous payments for this ticket queue instead of each summing
+    // the same total and all being allowed through. See rowLock.ts.
     await lockRow(tx, "ticket", ticketId, agencyId);
 
     // Re-read under the lock: the fare and any date-change fees must be the
     // committed ones, not a snapshot taken before the transaction opened.
     const ticket = await tx.ticket.findFirstOrThrow({ where: { id: ticketId, agencyId, isDeleted: false } });
 
-    await PostingService.assertPostableAccount(tx, agencyId, payload.cashAccountId);
+    if (owner && ticket.customerId !== owner.customerId) {
+      throw new AppError(
+        status.CONFLICT,
+        "This ticket was moved to another customer while you were paying — try again",
+      );
+    }
+
+    if (fromWallet) {
+      await WalletService.assertCovers(tx, agencyId, ticket.customerId, payload.amount);
+    } else {
+      await PostingService.assertPostableAccount(tx, agencyId, payload.cashAccountId!);
+    }
 
     const agg = await tx.ticketPayment.aggregate({
       where: { agencyId, ticketId },
@@ -410,7 +440,8 @@ const recordPayment = async (
       data: {
         agencyId,
         ticketId,
-        cashAccountId: payload.cashAccountId,
+        cashAccountId: fromWallet ? null : payload.cashAccountId,
+        fromWallet,
         amount: new Prisma.Decimal(payload.amount),
         method: payload.method,
         reference: payload.reference,
@@ -419,17 +450,22 @@ const recordPayment = async (
       },
     });
 
-    await PostingService.post(tx, {
-      agencyId,
-      cashAccountId: payload.cashAccountId,
-      direction: PostingDirection.IN,
-      amount: payload.amount,
-      source: PostingSource.SALES_PAYMENT,
-      sourceId: payment.id,
-      postedAt: paidAt,
-      note: payload.note,
-      createdById: user.userId,
-    });
+    // A wallet payment posts nothing: the cash arrived when the customer paid
+    // it in, and posting it again would put the same money on the balance
+    // sheet twice.
+    if (!fromWallet) {
+      await PostingService.post(tx, {
+        agencyId,
+        cashAccountId: payload.cashAccountId!,
+        direction: PostingDirection.IN,
+        amount: payload.amount,
+        source: PostingSource.SALES_PAYMENT,
+        sourceId: payment.id,
+        postedAt: paidAt,
+        note: payload.note,
+        createdById: user.userId,
+      });
+    }
   });
 
   return getTicketById(agencyId, ticketId);

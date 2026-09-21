@@ -16,10 +16,16 @@ type Tx = Prisma.TransactionClient;
  * Locking the parent row first makes those transactions queue: the second one
  * blocks here until the first commits, and then sums a total that includes it.
  *
- * INVARIANT: every writer takes at most ONE row lock, always the row the guard
- * is about — the source account for a transfer, the ticket/case/booking for a
- * payment. Nothing therefore holds one lock while waiting for another, so this
- * cannot deadlock. Keep it that way; a second lock needs a global ordering.
+ * INVARIANT: a writer takes ONE row lock, always the row the guard is about —
+ * the source account for a transfer, the ticket/case/booking for a payment.
+ *
+ * The single exception is a payment settled from the customer's wallet, which
+ * has two guards to hold at once: the invoice must not be overpaid, and the
+ * wallet must not be overdrawn. It takes `customer` FIRST and then the
+ * ticket/case/booking. That order is the whole safety argument — every other
+ * writer takes just one of those locks, so no transaction can be holding the
+ * sale row while waiting for the customer, and a cycle cannot form. Any new
+ * writer that needs both must take them in this same order.
  */
 
 /**
@@ -30,6 +36,7 @@ type Tx = Prisma.TransactionClient;
  */
 export const LOCKABLE_ROWS = {
   cashAccount: { table: "cash_accounts", notFound: "Cash account not found" },
+  customer: { table: "customers", notFound: "Customer not found" },
   ticket: { table: "tickets", notFound: "Ticket not found" },
   visaCase: { table: "visa_cases", notFound: "Visa case not found" },
   hajjBooking: { table: "hajj_bookings", notFound: "Booking not found" },

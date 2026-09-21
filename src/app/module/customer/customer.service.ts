@@ -25,6 +25,11 @@ const toNumber = PostingService.toNumber;
  *              − Σ collections  (payments against those, plus due receipts)
  *              − Σ discounts
  *
+ * A payment marked `fromWallet` is not a collection: no money arrived, the
+ * customer is spending what they paid in earlier, and that receipt already
+ * came off this balance. It settles its own invoice and leaves this figure
+ * alone.
+ *
  * All three sales modules contribute. The implementation this replaces counted
  * only tickets and carried a comment saying visa and hajj "will add their own
  * contributions here" — they never did, so a customer could owe thousands on a
@@ -72,17 +77,33 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
       }),
       prisma.ticketPayment.groupBy({
         by: ["ticketId"],
-        where: { agencyId, ticket: { customerId: { in: customerIds }, isDeleted: false } },
+        // fromWallet payments are left out here, and in the two below. They are
+        // an invoice being settled from money this customer already paid in,
+        // which the collection that brought it in has already taken off what
+        // they owe. Counting them again would credit the same money twice.
+        where: {
+          agencyId,
+          fromWallet: false,
+          ticket: { customerId: { in: customerIds }, isDeleted: false },
+        },
         _sum: { amount: true },
       }),
       prisma.visaPayment.groupBy({
         by: ["visaCaseId"],
-        where: { agencyId, visaCase: { customerId: { in: customerIds }, isDeleted: false } },
+        where: {
+          agencyId,
+          fromWallet: false,
+          visaCase: { customerId: { in: customerIds }, isDeleted: false },
+        },
         _sum: { amount: true },
       }),
       prisma.hajjPayment.groupBy({
         by: ["bookingId"],
-        where: { agencyId, booking: { customerId: { in: customerIds }, isDeleted: false } },
+        where: {
+          agencyId,
+          fromWallet: false,
+          booking: { customerId: { in: customerIds }, isDeleted: false },
+        },
         _sum: { amount: true },
       }),
       prisma.dueReceived.groupBy({
@@ -280,6 +301,27 @@ type LedgerRow = {
   runningDue: number;
 };
 
+type StatementPayment = {
+  amount: Prisma.Decimal;
+  fromWallet: boolean;
+  cashAccount: { name: string } | null;
+};
+
+/**
+ * A payment settled from the wallet credits nothing here. The money reached
+ * this statement when the customer paid it in — the receipt line is the
+ * credit. Crediting it again would show them paying twice and leave the
+ * running total below what they actually owe. The row is still listed, so an
+ * invoice that has been settled does not read as unpaid.
+ */
+const creditOf = (payment: StatementPayment) =>
+  payment.fromWallet ? 0 : PostingService.toNumber(payment.amount);
+
+const paymentDescription = (label: string, payment: StatementPayment) =>
+  payment.fromWallet
+    ? `${label} (settled from balance paid in earlier)`
+    : `${label} (${payment.cashAccount?.name ?? "—"})`;
+
 /**
  * Chronological statement with a running due, opening balance first.
  *
@@ -343,9 +385,9 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
       events.push({
         date: payment.paidAt,
         type: "ticket-payment",
-        description: `Ticket payment — PNR ${ticket.pnr} (${payment.cashAccount.name})`,
+        description: paymentDescription(`Ticket payment — PNR ${ticket.pnr}`, payment),
         debit: 0,
-        credit: toNumber(payment.amount),
+        credit: creditOf(payment),
       });
     }
   }
@@ -367,9 +409,9 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
       events.push({
         date: payment.paidAt,
         type: "visa-payment",
-        description: `Visa payment — ${label} (${payment.cashAccount.name})`,
+        description: paymentDescription(`Visa payment — ${label}`, payment),
         debit: 0,
-        credit: toNumber(payment.amount),
+        credit: creditOf(payment),
       });
     }
   }
@@ -393,9 +435,9 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
       events.push({
         date: payment.paidAt,
         type: "hajj-payment",
-        description: `Hajj payment — ${label} (${payment.cashAccount.name})`,
+        description: paymentDescription(`Hajj payment — ${label}`, payment),
         debit: 0,
-        credit: toNumber(payment.amount),
+        credit: creditOf(payment),
       });
     }
   }

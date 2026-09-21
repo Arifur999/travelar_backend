@@ -27,7 +27,10 @@ export interface IChangeVisaStatusPayload {
 }
 
 export interface IRecordVisaPaymentPayload {
-  cashAccountId: string;
+  /** Required unless the payment is settled from the wallet. */
+  cashAccountId?: string;
+  /** Settle from what the customer has already paid in. */
+  fromWallet?: boolean;
   amount: number;
   method?: PaymentMethod;
   reference?: string;

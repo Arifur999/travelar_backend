@@ -13,6 +13,7 @@ import { IqueryParams } from "../../interfaces/query.interface.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import { QueryBuilder } from "../../utils/QueryBuilder.js";
 import { PostingService } from "../cashAccount/posting.service.js";
+import { WalletService } from "../wallet/wallet.service.js";
 import { LIVE_BOOKING } from "./hajj.service.js";
 import { lockRow } from "../../utils/rowLock.js";
 import {
@@ -330,10 +331,28 @@ const recordPayment = async (
   user: IRequestUser,
 ) => {
   const paidAt = payload.paidAt ? new Date(payload.paidAt) : new Date();
+  const fromWallet = payload.fromWallet === true;
+
+  if (!fromWallet && !payload.cashAccountId) {
+    throw new AppError(status.BAD_REQUEST, "Choose the account the money went into");
+  }
+
+  // Which wallet to lock has to be known before the transaction opens, because
+  // the customer is locked before the booking (rowLock.ts). An edit could move
+  // the booking to another customer in between, so it is checked again below.
+  const owner = fromWallet
+    ? await prisma.hajjBooking.findFirst({
+        where: { id: bookingId, agencyId, isDeleted: false },
+        select: { customerId: true },
+      })
+    : null;
+  if (fromWallet && !owner) throw new AppError(status.NOT_FOUND, "Booking not found");
 
   await prisma.$transaction(async (tx) => {
-    // First, so simultaneous payments for this booking queue instead of each
-    // summing the same total and all being allowed through. See rowLock.ts.
+    if (owner) await lockRow(tx, "customer", owner.customerId, agencyId);
+
+    // So simultaneous payments for this booking queue instead of each summing
+    // the same total and all being allowed through. See rowLock.ts.
     await lockRow(tx, "hajjBooking", bookingId, agencyId);
 
     // Re-read under the lock: the package price must be the committed one, not
@@ -342,7 +361,18 @@ const recordPayment = async (
       where: { id: bookingId, agencyId, isDeleted: false },
     });
 
-    await PostingService.assertPostableAccount(tx, agencyId, payload.cashAccountId);
+    if (owner && booking.customerId !== owner.customerId) {
+      throw new AppError(
+        status.CONFLICT,
+        "This booking was moved to another customer while you were paying — try again",
+      );
+    }
+
+    if (fromWallet) {
+      await WalletService.assertCovers(tx, agencyId, booking.customerId, payload.amount);
+    } else {
+      await PostingService.assertPostableAccount(tx, agencyId, payload.cashAccountId!);
+    }
 
     const agg = await tx.hajjPayment.aggregate({
       where: { agencyId, bookingId },
@@ -361,7 +391,8 @@ const recordPayment = async (
       data: {
         agencyId,
         bookingId,
-        cashAccountId: payload.cashAccountId,
+        cashAccountId: fromWallet ? null : payload.cashAccountId,
+        fromWallet,
         amount: new Prisma.Decimal(payload.amount),
         method: payload.method,
         transactionRef: payload.transactionRef,
@@ -370,17 +401,22 @@ const recordPayment = async (
       },
     });
 
-    await PostingService.post(tx, {
-      agencyId,
-      cashAccountId: payload.cashAccountId,
-      direction: PostingDirection.IN,
-      amount: payload.amount,
-      source: PostingSource.SALES_PAYMENT,
-      sourceId: payment.id,
-      postedAt: paidAt,
-      note: payload.note,
-      createdById: user.userId,
-    });
+    // A wallet payment posts nothing: the cash arrived when the customer paid
+    // it in, and posting it again would put the same money on the balance
+    // sheet twice.
+    if (!fromWallet) {
+      await PostingService.post(tx, {
+        agencyId,
+        cashAccountId: payload.cashAccountId!,
+        direction: PostingDirection.IN,
+        amount: payload.amount,
+        source: PostingSource.SALES_PAYMENT,
+        sourceId: payment.id,
+        postedAt: paidAt,
+        note: payload.note,
+        createdById: user.userId,
+      });
+    }
   });
 
   return getBookingById(agencyId, bookingId);
