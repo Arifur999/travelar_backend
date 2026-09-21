@@ -74,7 +74,7 @@ It then sets `req.user = { userId, role, email, agencyId }`. The roles are:
 - Only transfers refuse to overdraw an account. Expenses, supplier payments and staff payouts may take a balance negative.
 
 **Concurrency.** Any guard that sums rows and then decides must start its transaction with `lockRow(tx, kind, id, agencyId)` (`src/app/utils/rowLock.ts`) and then re-read through `tx`.
-- Each writer takes **at most one** row lock, on the row its guard is about, so the guards cannot deadlock. Don't add a second lock unless you also define a global lock order.
+- A writer takes **one** row lock, on the row its guard is about, so the guards cannot deadlock. The single exception is a payment settled from the customer's balance, which has two guards to hold at once: it locks `customer` **first**, then the ticket/case/booking. Any new writer needing both takes them in that order.
 - A new lockable table goes in `LOCKABLE_ROWS`. `test/rowLock.test.ts` checks those names against the schema's `@@map`.
 
 **Prisma 7:**
