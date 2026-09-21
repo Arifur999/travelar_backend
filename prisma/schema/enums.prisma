@@ -25,6 +25,8 @@ enum PlanFeature {
   TICKETING
   VISA
   HAJJ_UMRAH
+  TOURS
+  HOTEL
   EXPENSE
   REPORTS
   CRM
@@ -107,6 +109,25 @@ enum HajjBatchStatus {
 enum HajjHotelType {
   MAKKAH
   MADINAH
+}
+
+/// A tour stops taking bookings when it closes, and a cancelled tour frees
+/// every seat on it. COMPLETED is the trip having run.
+enum TourPackageStatus {
+  OPEN
+  CLOSED
+  COMPLETED
+  CANCELLED
+}
+
+/// One-way, enforced in the service layer:
+/// RESERVED -> CONFIRMED | CANCELLED ; CONFIRMED -> COMPLETED | CANCELLED.
+/// COMPLETED and CANCELLED are final.
+enum TourBookingStatus {
+  RESERVED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
 }
 
 /// Which side of the ledger a posting sits on. Every money movement in the

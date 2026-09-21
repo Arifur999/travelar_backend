@@ -1,10 +1,11 @@
 import status from "http-status";
-import { HajjBookingStatus } from "../../../generated/prisma/enums.js";
+import { HajjBookingStatus, TourBookingStatus } from "../../../generated/prisma/enums.js";
 import AppError from "../../errorHelpers/AppError.js";
 import { prisma } from "../../lib/prisma.js";
 import { PostingService } from "../cashAccount/posting.service.js";
 import { HajjBookingService } from "../hajj/hajjBooking.service.js";
 import { TicketService } from "../ticket/ticket.service.js";
+import { TourBookingService } from "../tour/tourBooking.service.js";
 import { VisaService } from "../visa/visa.service.js";
 import {
   HAJJ_BOOKING_STATUS_LABELS,
@@ -12,6 +13,7 @@ import {
   HAJJ_TIER_LABELS,
   PAYMENT_METHOD_LABELS,
   TICKET_STATUS_LABELS,
+  TOUR_BOOKING_STATUS_LABELS,
   VISA_STATUS_LABELS,
 } from "./invoice.constant.js";
 import { IInvoiceDocument } from "./invoice.interface.js";
@@ -202,10 +204,59 @@ const buildHajjInvoice = async (agencyId: string, id: string): Promise<IInvoiceD
   };
 };
 
+/* ---------------------------------- tour ---------------------------------- */
+
+const buildTourInvoice = async (agencyId: string, id: string): Promise<IInvoiceDocument> => {
+  const booking = await TourBookingService.getBookingById(agencyId, id);
+  const { agency, customer } = await loadParties(agencyId, booking.customerId);
+
+  const cancelled = booking.status === TourBookingStatus.CANCELLED;
+  // Already a number: TourBookingService.decorate converts it.
+  const sellAmount = booking.sellAmount;
+  const tour = booking.tourPackage;
+  const seats = booking.travellers === 1 ? "1 traveller" : `${booking.travellers} travellers`;
+
+  const lines = [
+    { description: `${tour.name} — ${tour.destination}, ${seats}`, amount: sellAmount },
+  ];
+
+  // A cancelled booking bills nothing — the rule the customer's balance and
+  // statement already follow — so it is cancelled out here too, and anything
+  // already paid shows as credit rather than as money still owed.
+  if (cancelled) lines.push({ description: "Booking cancelled", amount: -sellAmount });
+  const total = cancelled ? 0 : sellAmount;
+
+  return {
+    number: invoiceNumber("TUR", booking.id),
+    kind: "Tour package",
+    status: TOUR_BOOKING_STATUS_LABELS[booking.status],
+    issuedAt: booking.createdAt,
+    agency,
+    customer,
+    details: [
+      { label: "Lead traveller", value: booking.leadTraveller },
+      { label: "Travellers", value: String(booking.travellers) },
+      { label: "Tour", value: tour.name },
+      { label: "Destination", value: tour.destination },
+      { label: "Departure", value: formatDay(tour.departureDate) },
+      { label: "Return", value: formatDay(tour.returnDate) },
+    ],
+    lines,
+    payments: toPayments(booking.payments),
+    total,
+    paid: booking.totalPaid,
+    due: total - booking.totalPaid,
+    note: cancelled
+      ? "This booking was cancelled, so nothing is payable. Payments received against it are held as credit for the customer."
+      : null,
+  };
+};
+
 const BUILDERS = {
   ticket: buildTicketInvoice,
   visa: buildVisaInvoice,
   hajj: buildHajjInvoice,
+  tour: buildTourInvoice,
 } as const;
 
 export type InvoiceKind = keyof typeof BUILDERS;
@@ -217,4 +268,10 @@ const generateInvoice = async (kind: InvoiceKind, agencyId: string, id: string) 
   return { pdf, filename: `${invoice.number}.pdf` };
 };
 
-export const InvoiceService = { generateInvoice, buildTicketInvoice, buildVisaInvoice, buildHajjInvoice };
+export const InvoiceService = {
+  generateInvoice,
+  buildTicketInvoice,
+  buildVisaInvoice,
+  buildHajjInvoice,
+  buildTourInvoice,
+};

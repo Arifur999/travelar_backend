@@ -49,6 +49,10 @@ const balanceOf = async (agencyId: string, customerId: string, client: Tx | type
         where: { agencyId, fromWallet: true, booking: { customerId } },
         _sum: { amount: true },
       }),
+      client.tourPayment.aggregate({
+        where: { agencyId, fromWallet: true, booking: { customerId } },
+        _sum: { amount: true },
+      }),
     ]),
   ]);
 
@@ -88,7 +92,7 @@ const assertCovers = async (tx: Tx, agencyId: string, customerId: string, amount
  * rule the customer list follows, so this cannot fan out per row.
  */
 const getHolders = async (agencyId: string): Promise<IWalletHolder[]> => {
-  const [receipts, ticketSpend, visaSpend, hajjSpend] = await Promise.all([
+  const [receipts, ticketSpend, visaSpend, hajjSpend, tourSpend] = await Promise.all([
     prisma.dueReceived.groupBy({
       by: ["customerId"],
       where: { agencyId },
@@ -106,6 +110,10 @@ const getHolders = async (agencyId: string): Promise<IWalletHolder[]> => {
       where: { agencyId, fromWallet: true },
       select: { amount: true, booking: { select: { customerId: true } } },
     }),
+    prisma.tourPayment.findMany({
+      where: { agencyId, fromWallet: true },
+      select: { amount: true, booking: { select: { customerId: true } } },
+    }),
   ]);
 
   const paidIn = new Map<string, number>();
@@ -120,6 +128,7 @@ const getHolders = async (agencyId: string): Promise<IWalletHolder[]> => {
   for (const row of ticketSpend) addSpend(row.ticket.customerId, row.amount);
   for (const row of visaSpend) addSpend(row.visaCase.customerId, row.amount);
   for (const row of hajjSpend) addSpend(row.booking.customerId, row.amount);
+  for (const row of tourSpend) addSpend(row.booking.customerId, row.amount);
 
   const customerIds = [...new Set([...paidIn.keys(), ...usedUp.keys()])];
   if (customerIds.length === 0) return [];
@@ -165,7 +174,7 @@ const getStatement = async (agencyId: string, customerId: string): Promise<IWall
   });
   if (!customer) throw new AppError(status.NOT_FOUND, "Customer not found");
 
-  const [receipts, ticketSpend, visaSpend, hajjSpend] = await Promise.all([
+  const [receipts, ticketSpend, visaSpend, hajjSpend, tourSpend] = await Promise.all([
     prisma.dueReceived.findMany({
       where: { agencyId, customerId },
       include: {
@@ -189,6 +198,15 @@ const getStatement = async (agencyId: string, customerId: string): Promise<IWall
     prisma.hajjPayment.findMany({
       where: { agencyId, fromWallet: true, booking: { customerId } },
       select: { id: true, amount: true, paidAt: true, booking: { select: { pilgrimName: true } } },
+    }),
+    prisma.tourPayment.findMany({
+      where: { agencyId, fromWallet: true, booking: { customerId } },
+      select: {
+        id: true,
+        amount: true,
+        paidAt: true,
+        booking: { select: { tourPackage: { select: { name: true } } } },
+      },
     }),
   ]);
 
@@ -224,6 +242,13 @@ const getStatement = async (agencyId: string, customerId: string): Promise<IWall
       date: payment.paidAt,
       type: "SPENT" as const,
       description: `Hajj & Umrah — ${payment.booking.pilgrimName}`,
+      amount: toNumber(payment.amount),
+    })),
+    ...tourSpend.map((payment) => ({
+      id: payment.id,
+      date: payment.paidAt,
+      type: "SPENT" as const,
+      description: `Tour — ${payment.booking.tourPackage.name}`,
       amount: toNumber(payment.amount),
     })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime());

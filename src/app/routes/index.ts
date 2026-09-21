@@ -20,6 +20,7 @@ import { SupplierTransactionRoutes } from "../module/supplierTransaction/supplie
 import { SupportRoutes, adminSupportRouter } from "../module/support/support.route.js";
 import { TeamRoutes } from "../module/team/team.route.js";
 import { TicketRoutes } from "../module/ticket/ticket.route.js";
+import { TourRoutes } from "../module/tour/tour.route.js";
 import { VisaRoutes } from "../module/visa/visa.route.js";
 import { WalletRoutes } from "../module/wallet/wallet.route.js";
 
@@ -42,6 +43,7 @@ router.use("/expenses", ExpenseRoutes);
 router.use("/capital", CapitalRoutes);
 router.use("/visa", VisaRoutes);
 router.use("/hajj", HajjRoutes);
+router.use("/tours", TourRoutes);
 router.use("/employees", EmployeeRoutes);
 router.use("/dashboard", DashboardRoutes);
 

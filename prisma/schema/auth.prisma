@@ -26,6 +26,7 @@ model User {
   ticketsCreated       Ticket[]              @relation("TicketCreatedBy")
   ticketStatusChanges  TicketStatusHistory[]
   visaCasesCreated     VisaCase[]            @relation("VisaCaseCreatedBy")
+  tourPackagesCreated  TourPackage[]         @relation("TourPackageCreatedBy")
   visaStatusChanges    VisaStatusHistory[]
 
   announcementsCreated  Announcement[]     @relation("AnnouncementAuthor")

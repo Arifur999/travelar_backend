@@ -26,4 +26,5 @@ export const InvoiceController = {
   getTicketInvoice: sendInvoice("ticket"),
   getVisaInvoice: sendInvoice("visa"),
   getHajjInvoice: sendInvoice("hajj"),
+  getTourInvoice: sendInvoice("tour"),
 };

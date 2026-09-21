@@ -1,6 +1,6 @@
 import status from "http-status";
 import { Prisma } from "../../../generated/prisma/client.js";
-import { HajjBookingStatus } from "../../../generated/prisma/enums.js";
+import { HajjBookingStatus, TourBookingStatus } from "../../../generated/prisma/enums.js";
 import AppError from "../../errorHelpers/AppError.js";
 import { logger } from "../../lib/logger.js";
 import { prisma } from "../../lib/prisma.js";
@@ -21,7 +21,7 @@ const toNumber = PostingService.toNumber;
  * What a customer owes:
  *
  *   currentDue = openingDue
- *              + Σ sales        (tickets, visa cases, hajj bookings)
+ *              + Σ sales        (tickets, visa cases, hajj and tour bookings)
  *              − Σ collections  (payments against those, plus due receipts)
  *              − Σ discounts
  *
@@ -35,8 +35,8 @@ const toNumber = PostingService.toNumber;
  * contributions here" — they never did, so a customer could owe thousands on a
  * visa case and still show a zero balance.
  *
- * Cancelled hajj bookings contribute nothing, matching how that module reports
- * revenue everywhere else.
+ * Cancelled hajj and tour bookings contribute nothing, matching how those
+ * modules report revenue everywhere else.
  *
  * A negative figure is meaningful and allowed: the customer is in credit.
  *
@@ -51,8 +51,17 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
 
   const customerIds = customers.map((c) => c.id);
 
-  const [tickets, visaCases, hajjBookings, ticketPayments, visaPayments, hajjPayments, dueReceipts] =
-    await Promise.all([
+  const [
+    tickets,
+    visaCases,
+    hajjBookings,
+    tourBookings,
+    ticketPayments,
+    visaPayments,
+    hajjPayments,
+    tourPayments,
+    dueReceipts,
+  ] = await Promise.all([
       prisma.ticket.groupBy({
         by: ["customerId"],
         where: { agencyId, isDeleted: false, customerId: { in: customerIds } },
@@ -74,6 +83,16 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
           status: { not: HajjBookingStatus.CANCELLED },
         },
         _sum: { packagePrice: true },
+      }),
+      prisma.tourBooking.groupBy({
+        by: ["customerId"],
+        where: {
+          agencyId,
+          isDeleted: false,
+          customerId: { in: customerIds },
+          status: { not: TourBookingStatus.CANCELLED },
+        },
+        _sum: { sellAmount: true },
       }),
       prisma.ticketPayment.groupBy({
         by: ["ticketId"],
@@ -106,6 +125,15 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
         },
         _sum: { amount: true },
       }),
+      prisma.tourPayment.groupBy({
+        by: ["bookingId"],
+        where: {
+          agencyId,
+          fromWallet: false,
+          booking: { customerId: { in: customerIds }, isDeleted: false },
+        },
+        _sum: { amount: true },
+      }),
       prisma.dueReceived.groupBy({
         by: ["customerId"],
         where: { agencyId, customerId: { in: customerIds } },
@@ -115,7 +143,7 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
 
   // Module payments group by their own parent id, so they have to be folded
   // back onto the customer that parent belongs to.
-  const [ticketOwners, visaOwners, hajjOwners] = await Promise.all([
+  const [ticketOwners, visaOwners, hajjOwners, tourOwners] = await Promise.all([
     prisma.ticket.findMany({
       where: { agencyId, isDeleted: false, customerId: { in: customerIds } },
       select: { id: true, customerId: true },
@@ -125,6 +153,10 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
       select: { id: true, customerId: true },
     }),
     prisma.hajjBooking.findMany({
+      where: { agencyId, isDeleted: false, customerId: { in: customerIds } },
+      select: { id: true, customerId: true },
+    }),
+    prisma.tourBooking.findMany({
       where: { agencyId, isDeleted: false, customerId: { in: customerIds } },
       select: { id: true, customerId: true },
     }),
@@ -155,10 +187,12 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
     visaCases.map((v) => [v.customerId, toNumber(v._sum.serviceFee) + toNumber(v._sum.embassyFee)]),
   );
   const hajjSale = new Map(hajjBookings.map((h) => [h.customerId, toNumber(h._sum.packagePrice)]));
+  const tourSale = new Map(tourBookings.map((t) => [t.customerId, toNumber(t._sum.sellAmount)]));
 
   const ticketPaid = foldByOwner(ticketOwners, ticketPayments, (r) => (r as { ticketId: string }).ticketId);
   const visaPaid = foldByOwner(visaOwners, visaPayments, (r) => (r as { visaCaseId: string }).visaCaseId);
   const hajjPaid = foldByOwner(hajjOwners, hajjPayments, (r) => (r as { bookingId: string }).bookingId);
+  const tourPaid = foldByOwner(tourOwners, tourPayments, (r) => (r as { bookingId: string }).bookingId);
 
   const receiptMap = new Map(
     dueReceipts.map((d) => [
@@ -176,12 +210,14 @@ const attachLedgerTotals = async <T extends { id: string; openingDue: Prisma.Dec
     const totalPurchase =
       (ticketSale.get(customer.id) ?? 0) +
       (visaSale.get(customer.id) ?? 0) +
-      (hajjSale.get(customer.id) ?? 0);
+      (hajjSale.get(customer.id) ?? 0) +
+      (tourSale.get(customer.id) ?? 0);
 
     const modulePayments =
       (ticketPaid.get(customer.id) ?? 0) +
       (visaPaid.get(customer.id) ?? 0) +
-      (hajjPaid.get(customer.id) ?? 0);
+      (hajjPaid.get(customer.id) ?? 0) +
+      (tourPaid.get(customer.id) ?? 0);
 
     const receipts = receiptMap.get(customer.id) ?? { received: 0, discount: 0 };
     const collectionsAmount = modulePayments + receipts.received;
@@ -289,6 +325,8 @@ type LedgerRowType =
   | "visa-payment"
   | "hajj"
   | "hajj-payment"
+  | "tour"
+  | "tour-payment"
   | "due-received"
   | "discount";
 
@@ -326,16 +364,16 @@ const paymentDescription = (label: string, payment: StatementPayment) =>
  * Chronological statement with a running due, opening balance first.
  *
  * It must end exactly on `currentDue`, so it reads the same rows with the same
- * rules as attachLedgerTotals: every non-deleted ticket, visa case and Hajj
- * booking, their payments, and due receipts. It used to list tickets only, so
- * for any customer with a visa or Hajj sale the statement stopped short of the
- * balance shown right above it. Change one of the two and the other has to
- * follow — the tripwire at the bottom logs if they ever disagree again.
+ * rules as attachLedgerTotals: every non-deleted ticket, visa case, Hajj and
+ * tour booking, their payments, and due receipts. It used to list tickets
+ * only, so for any customer with a visa or Hajj sale the statement stopped
+ * short of the balance shown right above it. Change one of the two and the
+ * other has to follow — the tripwire at the bottom logs if they disagree.
  */
 const getCustomerLedger = async (agencyId: string, id: string) => {
   const customer = await computeDue(agencyId, id);
 
-  const [tickets, visaCases, hajjBookings, dueReceipts] = await Promise.all([
+  const [tickets, visaCases, hajjBookings, tourBookings, dueReceipts] = await Promise.all([
     prisma.ticket.findMany({
       where: { agencyId, customerId: id, isDeleted: false },
       select: {
@@ -357,6 +395,15 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
       select: {
         id: true, pilgrimName: true, packagePrice: true, status: true, createdAt: true,
         hajjPackage: { select: { name: true } },
+        payments: { include: { cashAccount: { select: { name: true } } } },
+      },
+    }),
+    prisma.tourBooking.findMany({
+      where: { agencyId, customerId: id, isDeleted: false },
+      select: {
+        id: true, leadTraveller: true, travellers: true, sellAmount: true, status: true,
+        createdAt: true,
+        tourPackage: { select: { name: true, destination: true } },
         payments: { include: { cashAccount: { select: { name: true } } } },
       },
     }),
@@ -436,6 +483,32 @@ const getCustomerLedger = async (agencyId: string, id: string) => {
         date: payment.paidAt,
         type: "hajj-payment",
         description: paymentDescription(`Hajj payment — ${label}`, payment),
+        debit: 0,
+        credit: creditOf(payment),
+      });
+    }
+  }
+
+  for (const booking of tourBookings) {
+    const label = `${booking.tourPackage.name} — ${booking.tourPackage.destination}, ${booking.leadTraveller}`;
+    const cancelled = booking.status === TourBookingStatus.CANCELLED;
+
+    // A cancelled booking bills nothing — the same rule the totals use — but
+    // it stays on the statement so the payments taken against it still have a
+    // line to belong to. Money kept from it leaves the customer in credit.
+    events.push({
+      date: booking.createdAt,
+      type: "tour",
+      description: cancelled ? `Tour — ${label} (cancelled, not billed)` : `Tour — ${label}`,
+      debit: cancelled ? 0 : toNumber(booking.sellAmount),
+      credit: 0,
+    });
+
+    for (const payment of booking.payments) {
+      events.push({
+        date: payment.paidAt,
+        type: "tour-payment",
+        description: paymentDescription(`Tour payment — ${label}`, payment),
         debit: 0,
         credit: creditOf(payment),
       });

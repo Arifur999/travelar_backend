@@ -4,6 +4,7 @@ import {
   HajjTier,
   PaymentMethod,
   TicketStatus,
+  TourBookingStatus,
   VisaStatus,
 } from "../../../generated/prisma/enums.js";
 
@@ -53,4 +54,11 @@ export const HAJJ_TIER_LABELS: Record<HajjTier, string> = {
   ECONOMY: "Economy",
   PREMIUM: "Premium",
   VIP: "VIP",
+};
+
+export const TOUR_BOOKING_STATUS_LABELS: Record<TourBookingStatus, string> = {
+  RESERVED: "Reserved",
+  CONFIRMED: "Confirmed",
+  CANCELLED: "Cancelled",
+  COMPLETED: "Completed",
 };
