@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { PlanFeature } from "../src/generated/prisma/enums.js";
 import { startTestApp, type Session, type TestApp } from "./helpers/app.js";
 
 let t: TestApp;
@@ -133,6 +134,34 @@ describe("subscription state", () => {
     expect((await t.api.get("/ticketing", d)).status).toBe(200);
     // Customers are a base feature on every plan.
     expect((await t.api.get("/customers", d)).status).toBe(200);
+  });
+
+  it("the trial unlocks every module there is, including ones added later", async () => {
+    const f = await t.api.registerAgency("Foxtrot");
+
+    const mine = await t.api.ok("GET", "/auth/my-features", undefined, f);
+
+    // The web app locks its menu by this list, so a module missing from it
+    // ships locked on trial while the API happily serves it — which is what
+    // happened when this was a hand-written list.
+    expect(mine.isTrial).toBe(true);
+    expect([...mine.features].sort()).toEqual(Object.values(PlanFeature).sort());
+  });
+
+  it("an operator can sell any module the schema knows about", async () => {
+    const everything = await t.api.ok(
+      "POST",
+      "/admin/plans",
+      {
+        name: "Everything",
+        price: 2000,
+        durationDays: 30,
+        features: Object.values(PlanFeature),
+      },
+      operator,
+    );
+
+    expect([...everything.features].sort()).toEqual(Object.values(PlanFeature).sort());
   });
 
   it("a deleted agency's users are locked out", async () => {

@@ -1,7 +1,7 @@
 import status from "http-status";
 import { addDays } from "date-fns";
 import { env } from "../../../config/env.js";
-import { AgencyStatus, Role, UserStatus } from "../../../generated/prisma/enums.js";
+import { AgencyStatus, PlanFeature, Role, UserStatus } from "../../../generated/prisma/enums.js";
 import AppError from "../../errorHelpers/AppError.js";
 import { APIError } from "better-auth/api";
 import { auth } from "../../lib/auth.js";
@@ -19,7 +19,11 @@ import {
 
 /// Every feature is unlocked during the trial so a new agency can evaluate the
 /// whole product before choosing a plan.
-const ALL_FEATURES = ["TICKETING", "VISA", "HAJJ_UMRAH", "EXPENSE", "REPORTS", "CRM"] as const;
+///
+/// Read from the schema enum rather than listed here: this is what the web
+/// app locks its menu by, and when it was a hand-written list, two modules
+/// shipped locked on trial even though the API was serving them.
+const ALL_FEATURES = Object.values(PlanFeature);
 
 const registerAgency = async (payload: IRegisterPayload) => {
   const existingUser = await prisma.user.findUnique({ where: { email: payload.email } });

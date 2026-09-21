@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { PlanFeature } from "../../../generated/prisma/enums.js";
 
-const FEATURES = ["TICKETING", "VISA", "HAJJ_UMRAH", "EXPENSE", "REPORTS", "CRM"] as const;
+/// From the schema enum, so a module added later can be sold the day it
+/// ships instead of being refused here as an unknown feature.
+const FEATURES = Object.values(PlanFeature) as [PlanFeature, ...PlanFeature[]];
 
 const createPlanZodSchema = z.object({
   name: z.string("Plan name is required").min(2, "Name is too short"),
