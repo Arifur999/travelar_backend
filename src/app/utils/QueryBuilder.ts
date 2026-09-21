@@ -232,10 +232,18 @@ export class QueryBuilder<
     this.sortOrder = this.queryParams.sortOrder === "asc" ? "asc" : "desc";
 
     const path = this.sortBy.split(".");
-    this.query.orderBy =
+    const primary =
       path.length === 1
         ? { [path[0]!]: this.sortOrder }
         : { [path[0]!]: { [path[1]!]: this.sortOrder } };
+
+    // A second key on `id`, always. Rows sharing a sort value — two tickets
+    // created in the same millisecond, ten expenses on the same date — come
+    // back in whatever order the database felt like, and that order can differ
+    // between the query for page 1 and the query for page 2: a row is then
+    // shown twice, or never. Ids are uuid v7, so ordering by id is ordering by
+    // when the row was written, and the default view stays newest first.
+    this.query.orderBy = this.sortBy === "id" ? [primary] : [primary, { id: this.sortOrder }];
 
     return this;
   }

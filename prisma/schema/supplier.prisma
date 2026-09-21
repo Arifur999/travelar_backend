@@ -32,6 +32,7 @@ model Supplier {
   @@unique([agencyId, name])
   @@index([agencyId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("suppliers")
 }
 
@@ -63,5 +64,6 @@ model SupplierTransaction {
   @@index([supplierId])
   @@index([cashAccountId])
   @@index([agencyId, date])
+  @@index([agencyId, createdAt])
   @@map("supplier_transactions")
 }

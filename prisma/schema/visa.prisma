@@ -21,6 +21,7 @@ model VisaAgent {
 
   @@index([agencyId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("visa_agents")
 }
 
@@ -65,6 +66,7 @@ model VisaCase {
   @@index([agencyId, status])
   @@index([customerId])
   @@index([visaAgentId])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("visa_cases")
 }
 

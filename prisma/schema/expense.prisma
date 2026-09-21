@@ -20,6 +20,7 @@ model ExpenseCategory {
   @@unique([agencyId, name])
   @@index([agencyId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("expense_categories")
 }
 
@@ -47,5 +48,6 @@ model Expense {
   @@index([categoryId])
   @@index([cashAccountId])
   @@index([agencyId, date])
+  @@index([agencyId, createdAt])
   @@map("expenses")
 }

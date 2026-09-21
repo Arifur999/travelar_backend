@@ -36,6 +36,7 @@ model HajjPackage {
 
   @@index([agencyId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("hajj_packages")
 }
 
@@ -68,6 +69,7 @@ model HajjBatch {
   @@index([agencyId])
   @@index([packageId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("hajj_batches")
 }
 
@@ -94,6 +96,7 @@ model HajjRoom {
 
   @@index([agencyId])
   @@index([batchId])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("hajj_rooms")
 }
 
@@ -145,6 +148,7 @@ model HajjBooking {
   @@index([customerId])
   @@index([makkahRoomId])
   @@index([madinahRoomId])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("hajj_bookings")
 }
 

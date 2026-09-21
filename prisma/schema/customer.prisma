@@ -28,6 +28,7 @@ model Customer {
   @@index([agencyId])
   @@index([agencyId, isDeleted])
   @@index([phone])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("customers")
 }
 
@@ -70,5 +71,6 @@ model DueReceived {
   @@index([customerId])
   @@index([cashAccount1Id])
   @@index([agencyId, date])
+  @@index([agencyId, createdAt])
   @@map("due_received")
 }

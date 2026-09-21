@@ -36,6 +36,7 @@ model User {
 
   @@index([agencyId])
   @@index([email])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("users")
 }
 

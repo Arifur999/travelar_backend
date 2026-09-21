@@ -22,6 +22,7 @@ model AirlineMaster {
   @@unique([agencyId, name])
   @@index([agencyId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("airline_masters")
 }
 
@@ -48,6 +49,7 @@ model RouteMaster {
   @@unique([agencyId, name])
   @@index([agencyId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("route_masters")
 }
 

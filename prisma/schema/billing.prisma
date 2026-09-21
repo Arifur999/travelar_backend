@@ -53,6 +53,7 @@ model Payment {
   updatedAt     DateTime      @updatedAt
 
   @@index([agencyId])
+  @@index([agencyId, createdAt])
   @@map("subscription_payments")
 }
 

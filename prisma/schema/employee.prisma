@@ -27,6 +27,7 @@ model Employee {
 
   @@index([agencyId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("employees")
 }
 
@@ -59,6 +60,7 @@ model EmployeeAttendance {
   @@unique([employeeId, date])
   @@index([agencyId])
   @@index([agencyId, date])
+  @@index([agencyId, createdAt])
   @@map("employee_attendance")
 }
 
@@ -90,5 +92,6 @@ model EmployeeTransaction {
   @@index([employeeId])
   @@index([cashAccountId])
   @@index([agencyId, date])
+  @@index([agencyId, createdAt])
   @@map("employee_transactions")
 }

@@ -44,6 +44,7 @@ model CashAccount {
   @@unique([agencyId, name])
   @@index([agencyId])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, isDeleted, createdAt])
   @@map("cash_accounts")
 }
 
@@ -108,6 +109,7 @@ model BalanceTransfer {
   @@index([fromAccountId])
   @@index([toAccountId])
   @@index([agencyId, date])
+  @@index([agencyId, createdAt])
   @@map("balance_transfers")
 }
 
@@ -135,6 +137,7 @@ model CapitalFlow {
   @@index([agencyId])
   @@index([cashAccountId])
   @@index([agencyId, date])
+  @@index([agencyId, createdAt])
   @@map("capital_flows")
 }
 
