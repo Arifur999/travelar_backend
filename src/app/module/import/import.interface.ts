@@ -1,4 +1,5 @@
 import { ImportKind } from "./import.constant.js";
+import type { SheetData } from "./sheetReader.js";
 
 /** Something about one row that the reader could not resolve. */
 export interface IRowProblem {
@@ -73,11 +74,16 @@ export interface IImportProgress {
 
 /**
  * Passed to a stage when it is one half of a longer run: the record to attach
- * its rows to, and where to say how far it has got.
+ * its rows to, where to say how far it has got, and the workbook already read.
+ *
+ * The sheets matter as much as the rest. Reading one of these files is the
+ * most expensive thing the import does, and the two stages were each doing it
+ * — twice the peak memory for an answer that cannot have changed in between.
  */
 export interface IRunContext {
   importId: string;
   report: (step: string, done: number, total: number) => void;
+  sheets?: SheetData[];
 }
 
 /** One row an import created, and the line of the sheet it came from. */

@@ -9,7 +9,7 @@ import { CustomerService } from "../customer/customer.service.js";
 import { ExpenseService } from "../expense/expense.service.js";
 import { RouteMasterService } from "../routeMaster/routeMaster.service.js";
 import { SupplierService } from "../supplier/supplier.service.js";
-import { TAB_SPECS } from "./import.constant.js";
+import { isImportableTab, TAB_SPECS } from "./import.constant.js";
 import { IFoundationsResult, IImportedRecord, IRunContext } from "./import.interface.js";
 import { ImportRunService } from "./importRun.service.js";
 import {
@@ -561,7 +561,7 @@ const importFoundations = async (
 
   let sheets: SheetData[];
   try {
-    sheets = await readWorkbook(file);
+    sheets = ctx?.sheets ?? (await readWorkbook(file, isImportableTab));
   } catch {
     throw new AppError(
       status.BAD_REQUEST,

@@ -7,8 +7,10 @@ import { prisma } from "../../lib/prisma.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import { FoundationsImportService } from "./foundations.service.js";
 import { HistoryImportService } from "./history.service.js";
+import { isImportableTab } from "./import.constant.js";
 import { IImportProgress, IImportStarted } from "./import.interface.js";
 import { ImportRunService } from "./importRun.service.js";
+import { readWorkbook } from "./sheetReader.js";
 
 /**
  * One upload, one button, one thing to undo.
@@ -111,9 +113,14 @@ const work = async (
   file: Buffer,
   user: IRequestUser,
 ) => {
-  const ctx = { importId, report: reporterFor(importId) };
-
   try {
+    // Read once, for both stages. Reading one of these workbooks is the most
+    // expensive thing here by a wide margin, and doing it twice was enough to
+    // put the process over the memory it is allowed and have it killed part of
+    // the way through the import.
+    const sheets = await readWorkbook(file, isImportableTab);
+    const ctx = { importId, report: reporterFor(importId), sheets };
+
     const lists = await FoundationsImportService.importFoundations(agencyId, filename, file, user, ctx);
     const history = await HistoryImportService.importHistory(agencyId, filename, file, user, ctx);
 
@@ -162,6 +169,10 @@ const start = async (
   options?: { force?: boolean },
 ): Promise<IImportStarted> => {
   if (!file || file.length === 0) throw new AppError(status.BAD_REQUEST, "The file is empty");
+
+  // A run the server was killed in the middle of still says RUNNING, and would
+  // block every import after it for ever.
+  await ImportRunService.markStaleRuns(agencyId);
 
   const running = await prisma.dataImport.findFirst({
     where: { agencyId, status: ImportStatus.RUNNING },

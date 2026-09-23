@@ -12,7 +12,7 @@ import { DueReceivedService } from "../dueReceived/dueReceived.service.js";
 import { ExpenseService } from "../expense/expense.service.js";
 import { SupplierTransactionService } from "../supplierTransaction/supplierTransaction.service.js";
 import { TicketService } from "../ticket/ticket.service.js";
-import { ImportKind, TAB_SPECS, TICKET_STATUS_MAP } from "./import.constant.js";
+import { ImportKind, isImportableTab, TAB_SPECS, TICKET_STATUS_MAP } from "./import.constant.js";
 import { IHistoryResult, IImportedRecord, IRunContext, ITabProblem } from "./import.interface.js";
 import { ImportRunService } from "./importRun.service.js";
 import {
@@ -757,7 +757,7 @@ const importHistory = async (
 
   let sheets: SheetData[];
   try {
-    sheets = await readWorkbook(file);
+    sheets = ctx?.sheets ?? (await readWorkbook(file, isImportableTab));
   } catch {
     throw new AppError(
       status.BAD_REQUEST,

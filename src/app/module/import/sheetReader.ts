@@ -69,21 +69,39 @@ const cellValue = (cell: ExcelJS.Cell): CellValue => {
   return null;
 };
 
-export const readWorkbook = async (file: Buffer): Promise<SheetData[]> => {
+/**
+ * Every sheet in the workbook, with the rows of the ones worth keeping.
+ *
+ * `shouldRead` is about memory, not tidiness. One of these files is fifteen
+ * sheets and half of them are the spreadsheet's own dashboards — five thousand
+ * rows of formulas this app recomputes for itself and never reads. Copying
+ * those out cost more than the whole import, and on a container with half a
+ * gigabyte it is the difference between finishing and being killed part of the
+ * way through. A sheet that is not read still comes back, by name and with no
+ * rows, because the screen lists what it left alone.
+ */
+export const readWorkbook = async (
+  file: Buffer,
+  shouldRead?: (name: string) => boolean,
+): Promise<SheetData[]> => {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(file as unknown as ArrayBuffer);
 
   return workbook.worksheets.map((sheet) => {
+    const name = sheet.name.trim();
     const rows: SheetRow[] = [];
-    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      const cells: CellValue[] = [];
-      row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
-        cells[columnNumber - 1] = cellValue(cell);
-      });
-      rows.push({ number: rowNumber, cells });
-    });
 
-    return { name: sheet.name.trim(), headerRow: null, headers: [], rows };
+    if (!shouldRead || shouldRead(name)) {
+      sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        const cells: CellValue[] = [];
+        row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+          cells[columnNumber - 1] = cellValue(cell);
+        });
+        rows.push({ number: rowNumber, cells });
+      });
+    }
+
+    return { name, headerRow: null, headers: [], rows };
   });
 };
 

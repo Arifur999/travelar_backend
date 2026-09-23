@@ -199,6 +199,24 @@ export const TAB_SPECS: TabSpec[] = [
   },
 ];
 
+const loosely = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** The spec for a tab, by the name the workbook gives it. */
+export const specForTab = (name: string): TabSpec | null =>
+  TAB_SPECS.find((spec) => spec.tabNames.some((candidate) => loosely(name).includes(candidate))) ??
+  null;
+
+/**
+ * Whether this tab is worth reading at all.
+ *
+ * Used before the rows are copied out, not after: the tabs nobody here reads
+ * are the biggest ones in the file. Defined next to the report list rather
+ * than beside the reader, so the filter and the "left alone" the screen shows
+ * cannot drift apart and quietly skip a tab that holds real rows.
+ */
+export const isImportableTab = (name: string) =>
+  specForTab(name) !== null && !isReportOnlyTab(name);
+
 /**
  * Tabs that hold no data of their own. They are reports the spreadsheet
  * computes, and this app computes the same things from the rows it imports —
@@ -213,6 +231,9 @@ export const REPORT_ONLY_TABS = [
   "cash flow",
   "settings",
 ];
+
+export const isReportOnlyTab = (name: string) =>
+  REPORT_ONLY_TABS.some((candidate) => loosely(name).includes(candidate));
 
 /**
  * What the sheet calls a ticket's state, and what it is here.

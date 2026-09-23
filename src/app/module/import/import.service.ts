@@ -1,10 +1,10 @@
 import status from "http-status";
 import AppError from "../../errorHelpers/AppError.js";
 import {
-  REPORT_ONLY_TABS,
-  TAB_SPECS,
+  isImportableTab,
+  isReportOnlyTab,
+  specForTab,
   type FieldSpec,
-  type TabSpec,
 } from "./import.constant.js";
 import { IImportPreview, IRowProblem, ITabPreview } from "./import.interface.js";
 import {
@@ -31,13 +31,6 @@ import {
  */
 
 const normalise = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
-
-const specForTab = (name: string): TabSpec | null =>
-  TAB_SPECS.find((spec) => spec.tabNames.some((candidate) => normalise(name).includes(candidate))) ??
-  null;
-
-const isReportOnly = (name: string) =>
-  REPORT_ONLY_TABS.some((candidate) => normalise(name).includes(candidate));
 
 const valueOf = (row: SheetRow, field: FieldSpec, index: number | null) => {
   switch (field.type) {
@@ -218,7 +211,9 @@ const preview = async (filename: string, file: Buffer): Promise<IImportPreview> 
 
   let sheets: SheetData[];
   try {
-    sheets = await readWorkbook(file);
+    // Only the tabs this reports on. The rest come back named and empty,
+    // which is all the "left alone" list below needs.
+    sheets = await readWorkbook(file, isImportableTab);
   } catch {
     throw new AppError(
       status.BAD_REQUEST,
@@ -230,7 +225,7 @@ const preview = async (filename: string, file: Buffer): Promise<IImportPreview> 
   const skipped: string[] = [];
 
   for (const sheet of sheets) {
-    if (isReportOnly(sheet.name) || !specForTab(sheet.name)) {
+    if (isReportOnlyTab(sheet.name) || !specForTab(sheet.name)) {
       skipped.push(sheet.name);
       continue;
     }

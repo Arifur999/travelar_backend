@@ -109,6 +109,29 @@ const DELETE_ORDER: {
   },
 ];
 
+/**
+ * How long a run may go without saying anything before it is presumed dead.
+ *
+ * A live run writes its progress about a hundred times, so silence this long
+ * means the process that was doing the work is gone — killed for memory,
+ * restarted by a deploy, or crashed. Without this the record stays RUNNING for
+ * ever, the screen shows a bar that will never move, and the next import is
+ * refused because one is supposedly already going.
+ */
+const PRESUMED_DEAD_AFTER_MS = 10 * 60 * 1000;
+
+const markStaleRuns = async (agencyId: string) => {
+  const cutoff = new Date(Date.now() - PRESUMED_DEAD_AFTER_MS);
+
+  await prisma.dataImport.updateMany({
+    where: { agencyId, status: ImportStatus.RUNNING, updatedAt: { lt: cutoff } },
+    data: {
+      status: ImportStatus.FAILED,
+      note: "The server restarted while this import was running. What it had already brought in is listed against it and can be undone, or upload the file again — a second run skips everything the first one finished.",
+    },
+  });
+};
+
 const toRun = (run: {
   id: string;
   filename: string;
@@ -188,6 +211,8 @@ const attachRecords = async (agencyId: string, importId: string, recorded: IImpo
 };
 
 const listRuns = async (agencyId: string): Promise<IImportRun[]> => {
+  await markStaleRuns(agencyId);
+
   const runs = await prisma.dataImport.findMany({
     where: { agencyId },
     orderBy: { createdAt: "desc" },
@@ -199,6 +224,8 @@ const listRuns = async (agencyId: string): Promise<IImportRun[]> => {
 
 /** One run, which is what the screen polls while the bar is moving. */
 const getRun = async (agencyId: string, importId: string): Promise<IImportRun> => {
+  await markStaleRuns(agencyId);
+
   const run = await prisma.dataImport.findFirst({ where: { id: importId, agencyId } });
   if (!run) throw new AppError(status.NOT_FOUND, "Import not found");
   return toRun(run);
@@ -265,4 +292,11 @@ const revertRun = async (agencyId: string, importId: string): Promise<IImportRun
   return toRun(updated);
 };
 
-export const ImportRunService = { recordRun, attachRecords, listRuns, getRun, revertRun };
+export const ImportRunService = {
+  recordRun,
+  attachRecords,
+  markStaleRuns,
+  listRuns,
+  getRun,
+  revertRun,
+};

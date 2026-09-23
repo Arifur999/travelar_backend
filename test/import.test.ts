@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { prisma } from "../src/app/lib/prisma.js";
 import { startTestApp, type Session, type TestApp } from "./helpers/app.js";
 
 /**
@@ -746,5 +747,100 @@ describe("bringing the whole workbook across in one run", () => {
 
     const customers = await t.api.ok("GET", "/customers/dashboard", undefined, agency);
     expect(customers.summary.totalCustomers).toBe(0);
+  });
+});
+
+/**
+ * What happens to a run when the process doing it goes away.
+ *
+ * This is not hypothetical: the first real workbook put the API over the
+ * memory its container allowed, and the kernel killed it a step into the
+ * import. The record was left saying RUNNING, the screen showed a bar that
+ * would never move again, and every import after it was refused because one
+ * was supposedly already going. Recovering from that is part of the feature.
+ */
+describe("a run whose server went away", () => {
+  const startRun = async (agency: Session, file: Buffer) => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array(file)], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      "book.xlsx",
+    );
+    form.append("force", "true");
+
+    const response = await fetch(`${t.api.baseUrl}/api/v1/imports/run`, {
+      method: "POST",
+      headers: {
+        Cookie: `accessToken=${agency.accessToken}; better-auth.session_token=${agency.token}`,
+        "X-Forwarded-For": "10.9.9.9",
+      },
+      body: form,
+    });
+
+    return { status: response.status, body: await response.json() };
+  };
+
+  /** As the database would look after the process was killed mid-run. */
+  const pretendItDied = async (importId: string, minutesAgo: number) => {
+    await prisma.$executeRawUnsafe(
+      `UPDATE data_imports SET status = 'RUNNING', "updatedAt" = NOW() - INTERVAL '${minutesAgo} minutes' WHERE id = $1`,
+      importId,
+    );
+  };
+
+  it("is marked as stopped, not left running for ever", async () => {
+    const agency = await t.api.registerAgency("Killed");
+    const started = await startRun(agency, await buildWorkbook());
+
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      const current = await t.api.ok("GET", `/imports/${started.body.data.importId}`, undefined, agency);
+      if (current.status !== "RUNNING") break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    await pretendItDied(started.body.data.importId, 30);
+
+    const run = await t.api.ok("GET", `/imports/${started.body.data.importId}`, undefined, agency);
+    expect(run.status).toBe("FAILED");
+    expect(run.note).toMatch(/restarted/i);
+  });
+
+  it("does not block the next import", async () => {
+    const agency = await t.api.registerAgency("Killed twice");
+    const file = await buildWorkbook();
+    const started = await startRun(agency, file);
+
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      const current = await t.api.ok("GET", `/imports/${started.body.data.importId}`, undefined, agency);
+      if (current.status !== "RUNNING") break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    await pretendItDied(started.body.data.importId, 30);
+
+    // Uploading again is the obvious thing to try, and it has to work: the
+    // rows the dead run managed are recognised and skipped.
+    const again = await startRun(agency, file);
+    expect(again.status).toBe(202);
+  });
+
+  it("leaves a run that is genuinely still going alone", async () => {
+    const agency = await t.api.registerAgency("Still going");
+    const started = await startRun(agency, await buildWorkbook());
+
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      const current = await t.api.ok("GET", `/imports/${started.body.data.importId}`, undefined, agency);
+      if (current.status !== "RUNNING") break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    // A minute of quiet is a busy step, not a dead process.
+    await pretendItDied(started.body.data.importId, 1);
+
+    const run = await t.api.ok("GET", `/imports/${started.body.data.importId}`, undefined, agency);
+    expect(run.status).toBe("RUNNING");
   });
 });
