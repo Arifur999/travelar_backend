@@ -80,12 +80,16 @@ export const memoryProblemFor = (limit: number | null, fileBytes: number): strin
 
   const asMb = (bytes: number) => Math.round(bytes / MB);
 
+  // Written for whoever reads it, which is the agency and not the person who
+  // runs the server. The two figures are worth giving — they are what makes
+  // the request concrete — but the file that sets the limit and the runbook
+  // that explains it sit on a machine a tenant has no access to, and naming
+  // them only tells them about our deployment.
   return (
-    `This server gives the API ${asMb(limit)} MB of memory, and reading a ` +
-    `${asMb(fileBytes)} MB spreadsheet needs about ${asMb(needed)} MB. Starting the ` +
-    `import would only get it killed part of the way through, so it has not been ` +
-    `started. The API container's memory limit needs raising — deploy/docker-compose.yml ` +
-    `sets it, and deploy/README.md has the steps.`
+    `This spreadsheet needs about ${asMb(needed)} MB to read, and this server allows ` +
+    `the app only ${asMb(limit)} MB. The import was not started, rather than being ` +
+    `stopped halfway through. Ask whoever runs your server to raise the memory limit ` +
+    `on the Travelar API, then try again.`
   );
 };
 

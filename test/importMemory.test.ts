@@ -26,6 +26,8 @@ describe("whether this server can hold this import", () => {
     // rather than a round number someone liked.
     expect(problem).toMatch(/\b(6[0-9]{2}|7[0-9]{2}) MB\b/);
     expect(problem).toMatch(/memory limit/i);
+    // Written for the agency, who can do nothing with a path in our repository.
+    expect(problem).not.toMatch(/docker-compose|README|deploy\//i);
   });
 
   it("allows it once the limit is the one the compose file now sets", () => {
