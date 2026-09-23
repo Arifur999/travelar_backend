@@ -14,6 +14,7 @@ import { EmployeeRoutes } from "../module/employee/employee.route.js";
 import { ExpenseRoutes } from "../module/expense/expense.route.js";
 import { HajjRoutes } from "../module/hajj/hajj.route.js";
 import { HotelRoutes } from "../module/hotel/hotel.route.js";
+import { ImportRoutes } from "../module/import/import.route.js";
 import { InternalRoutes } from "../module/internal/internal.route.js";
 import { RouteMasterRoutes } from "../module/routeMaster/routeMaster.route.js";
 import { SupplierRoutes } from "../module/supplier/supplier.route.js";
@@ -46,6 +47,7 @@ router.use("/visa", VisaRoutes);
 router.use("/hajj", HajjRoutes);
 router.use("/tours", TourRoutes);
 router.use("/hotels", HotelRoutes);
+router.use("/imports", ImportRoutes);
 router.use("/employees", EmployeeRoutes);
 router.use("/dashboard", DashboardRoutes);
 
