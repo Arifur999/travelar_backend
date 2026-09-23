@@ -8,6 +8,7 @@ import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import { FoundationsImportService } from "./foundations.service.js";
 import { HistoryImportService } from "./history.service.js";
 import { isImportableTab } from "./import.constant.js";
+import { importMemoryProblem } from "./memoryLimit.js";
 import { IImportProgress, IImportStarted } from "./import.interface.js";
 import { ImportRunService } from "./importRun.service.js";
 import { readWorkbook } from "./sheetReader.js";
@@ -169,6 +170,11 @@ const start = async (
   options?: { force?: boolean },
 ): Promise<IImportStarted> => {
   if (!file || file.length === 0) throw new AppError(status.BAD_REQUEST, "The file is empty");
+
+  // Checked before anything is written, because the alternative is the kernel
+  // stopping it halfway with nothing on screen to explain why.
+  const tooBig = importMemoryProblem(file.length);
+  if (tooBig) throw new AppError(status.INSUFFICIENT_STORAGE, tooBig);
 
   // A run the server was killed in the middle of still says RUNNING, and would
   // block every import after it for ever.

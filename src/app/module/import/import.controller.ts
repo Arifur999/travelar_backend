@@ -8,6 +8,7 @@ import { FoundationsImportService } from "./foundations.service.js";
 import { HistoryImportService } from "./history.service.js";
 import { ImportRunService } from "./importRun.service.js";
 import { ImportRunnerService } from "./importRunner.service.js";
+import { importMemoryProblem } from "./memoryLimit.js";
 import { ImportService } from "./import.service.js";
 
 /**
@@ -24,6 +25,11 @@ const preview = catchAsync(async (req: Request, res: Response) => {
   if (!file) {
     throw new AppError(status.BAD_REQUEST, "Attach the spreadsheet as `file`");
   }
+
+  // Reading the file to report on it costs the same as reading it to import
+  // it, and dies the same way.
+  const tooBig = importMemoryProblem(file.buffer.length);
+  if (tooBig) throw new AppError(status.INSUFFICIENT_STORAGE, tooBig);
 
   const result = await ImportService.preview(file.originalname, file.buffer);
 
