@@ -183,6 +183,15 @@ bash /root/travelar-src/deploy/attach-site.sh   # certificate + vhost for it
 # update the scripts, the compose file or the vhost after they change in git
 cd /root/travelar-src && git pull
 bash deploy/bootstrap.sh && bash deploy/install.sh && bash deploy/attach-site.sh
+cd /opt/travelar && docker compose up -d
+
+# If that recreated travelar-api but left travelar-web running — which is what
+# a compose change touching only the API does — restart the web container too:
+docker compose restart travelar-web
+# The new API container has a new address, and the web app holds pooled
+# connections open to the old one. Until those are dropped every page says
+# "Can't reach Travelar" while the API is perfectly healthy. A normal release
+# replaces both containers, so this only bites after a partial recreation.
 
 # backups: /opt/travelar/backups (copy them off the box); restore: ops/backup/README.md
 
