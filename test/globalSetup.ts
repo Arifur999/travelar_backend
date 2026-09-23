@@ -30,7 +30,10 @@ export default async function setup() {
     await client.end();
   }
 
-  execSync("pnpm exec prisma migrate deploy", {
+  // Through npx rather than `pnpm exec`: npx resolves the same local
+  // binary, and the suite should not stop working because one package
+  // manager happens to be unavailable on the machine running it.
+  execSync("npx prisma migrate deploy", {
     stdio: "inherit",
     env: { ...process.env, DATABASE_URL: url },
   });
