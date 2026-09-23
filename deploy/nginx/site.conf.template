@@ -40,8 +40,11 @@ server {
     # second copy. Two X-Frame-Options values are treated as invalid, which is
     # weaker than one.
 
-    # A 5 MB document upload plus the form around it.
-    client_max_body_size 10m;
+    # An agency moving in uploads its whole spreadsheet, and the API takes a
+    # file up to 15 MB. This has to clear that plus what multipart adds around
+    # it, or nginx refuses the upload before either app sees it — and a 413 at
+    # this layer reaches the browser with no message anyone can act on.
+    client_max_body_size 20m;
 
     # Next answers with large headers (a nonce CSP, auth cookies, preload
     # links); the default 4k buffer turns that into a 502.
