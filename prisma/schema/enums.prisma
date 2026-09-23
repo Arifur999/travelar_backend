@@ -139,6 +139,18 @@ enum HotelBookingStatus {
   CANCELLED
 }
 
+/// What an import run was carrying. The master lists have to exist before
+/// the history that points at them, so a run is one or the other.
+enum ImportStage {
+  FOUNDATIONS
+  HISTORY
+}
+
+enum ImportStatus {
+  COMPLETED
+  REVERTED
+}
+
 /// Which side of the ledger a posting sits on. Every money movement in the
 /// system is exactly one AccountPosting with one of these directions.
 enum PostingDirection {

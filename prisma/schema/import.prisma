@@ -1,0 +1,65 @@
+/// One upload of an agency's old spreadsheet.
+///
+/// An agency moving in brings years of business, and the import that carries
+/// it over is the one operation nobody can check by eye afterwards — so every
+/// run is recorded, and every record it creates is written down next to it.
+/// That is what makes it possible to say "undo that" and mean it.
+model DataImport {
+  id          String           @id @default(uuid(7))
+
+  agencyId    String
+  agency      Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  filename    String
+  /// What the run was for: the master lists, or the history on top of them.
+  stage       ImportStage
+  status      ImportStatus     @default(COMPLETED)
+
+  /// What it created, by kind — the same figures the preview promised, kept
+  /// so the two can be compared after the fact.
+  counts      Json
+
+  /// Set when the run was rolled back, so the record stays and the reason with it.
+  revertedAt  DateTime?
+  note        String?          @db.Text
+
+  createdById String?
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  records     ImportedRecord[]
+
+  @@index([agencyId])
+  @@index([agencyId, createdAt])
+  @@map("data_imports")
+}
+
+/// One row this import created, and where in the spreadsheet it came from.
+///
+/// A separate table rather than a column on every model: the alternative is
+/// adding an importId to a dozen tables and remembering it in a dozen more
+/// writers, and forgetting one of them is what makes a rollback leave rubbish
+/// behind.
+model ImportedRecord {
+  id         String     @id @default(uuid(7))
+
+  agencyId   String
+  importId   String
+  dataImport DataImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  /// Which table, as the rollback knows it: "customer", "ticket", …
+  entity     String
+  entityId   String
+
+  /// The tab and the row number the spreadsheet itself shows, so a figure can
+  /// always be traced back to the line it came from.
+  sourceTab  String?
+  sourceRow  Int?
+
+  createdAt  DateTime   @default(now())
+
+  @@index([importId])
+  @@index([agencyId, entity])
+  @@map("imported_records")
+}

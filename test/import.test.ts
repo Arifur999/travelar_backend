@@ -114,6 +114,15 @@ const buildWorkbook = async (): Promise<Buffer> => {
     "Pending",
   ]);
 
+  const balances = workbook.addWorksheet("Balance Dashboard ");
+  balances.addRow(["Balance Overview"]);
+  balances.addRow(["Bank / Person Name", "Previous Amount +/-"]);
+  balances.addRow(["bKash", "৳", 0]);
+  // A section title and a stray header cell, the way a dashboard carries
+  // them between its rows. Neither is an account.
+  balances.addRow(["A D J U S T M E N T S"]);
+  balances.addRow(["Date"]);
+
   const unknown = workbook.addWorksheet("Agent notes");
   unknown.addRow(["whatever the agency keeps here"]);
 
@@ -122,7 +131,12 @@ const buildWorkbook = async (): Promise<Buffer> => {
 };
 
 /** The API takes the file as multipart, which the JSON client cannot send. */
-const postWorkbook = async (session: Session, file: Buffer, filename = "book.xlsx") => {
+const postWorkbook = async (
+  session: Session,
+  file: Buffer,
+  filename = "book.xlsx",
+  path = "/imports/preview",
+) => {
   const form = new FormData();
   form.append(
     "file",
@@ -132,7 +146,7 @@ const postWorkbook = async (session: Session, file: Buffer, filename = "book.xls
     filename,
   );
 
-  const response = await fetch(`${t.api.baseUrl}/api/v1/imports/preview`, {
+  const response = await fetch(`${t.api.baseUrl}/api/v1${path}`, {
     method: "POST",
     headers: {
       Cookie: `accessToken=${session.accessToken}; better-auth.session_token=${session.token}`,
@@ -198,7 +212,12 @@ describe("reading an uploaded workbook", () => {
 
     expect(body.data.skipped).toContain("Read Me");
     expect(body.data.skipped).toContain("Agent notes");
-    expect(body.data.tabs.map((tab: { tab: string }) => tab.tab)).toEqual(["Purchase and Sales"]);
+    // The balance tab is data — the accounts come from it — so it is read,
+    // while the report tabs and anything unrecognised are left alone.
+    expect(body.data.tabs.map((tab: { tab: string }) => tab.tab).sort()).toEqual([
+      "Balance Dashboard",
+      "Purchase and Sales",
+    ]);
   });
 
   it("counts what it would create without creating any of it", async () => {
@@ -225,5 +244,109 @@ describe("reading an uploaded workbook", () => {
     const { status } = await postWorkbook(operator, await buildWorkbook());
 
     expect(status).toBe(403);
+  });
+});
+
+describe("bringing the lists across", () => {
+  it("creates the accounts, airlines, suppliers and customers the sheet names", async () => {
+    const agency = await t.api.registerAgency("Foundations");
+
+    const { status: code, body } = await postWorkbook(
+      agency,
+      await buildWorkbook(),
+      "book.xlsx",
+      "/imports/foundations",
+    );
+
+    expect(code).toBe(201);
+    // Bank Asia and Cash from the sales rows, bKash from the balance tab.
+    expect(body.data.counts.accounts).toBe(3);
+    expect(body.data.counts.suppliers).toBe(3);
+    expect(body.data.counts.customers).toBe(3);
+
+    const customers = await t.api.ok("GET", "/customers/dashboard", undefined, agency);
+    expect(customers.summary.totalCustomers).toBe(3);
+
+    const accounts = await t.api.ok("GET", "/accounts", undefined, agency);
+    // The section title and the stray header are not accounts, whatever
+    // column they happen to sit in.
+    expect(accounts.data.map((account: { name: string }) => account.name).sort()).toEqual([
+      "Bank Asia",
+      "Cash",
+      "bKash",
+    ]);
+  });
+
+  it("adds nothing the second time the same file is imported", async () => {
+    const agency = await t.api.registerAgency("Twice");
+    const file = await buildWorkbook();
+
+    await postWorkbook(agency, file, "book.xlsx", "/imports/foundations");
+    const { body } = await postWorkbook(agency, file, "book.xlsx", "/imports/foundations");
+
+    // Everything matched what was already there, so nothing was created —
+    // which is what makes it safe to fix a few rows and run it again.
+    expect(body.data.counts).toMatchObject({
+      accounts: 0,
+      suppliers: 0,
+      customers: 0,
+      airlines: 0,
+    });
+
+    const customers = await t.api.ok("GET", "/customers/dashboard", undefined, agency);
+    expect(customers.summary.totalCustomers).toBe(3);
+  });
+
+  it("keeps what the agency typed in itself", async () => {
+    const agency = await t.api.registerAgency("Existing");
+    await t.api.ok("POST", "/accounts", { name: "Cash", openingBalance: 5000 }, agency);
+
+    const { body } = await postWorkbook(
+      agency,
+      await buildWorkbook(),
+      "book.xlsx",
+      "/imports/foundations",
+    );
+
+    // The sheet also has a "Cash" account; the one already in the books wins,
+    // with its balance untouched.
+    expect(body.data.counts.accounts).toBe(2);
+
+    const accounts = await t.api.ok("GET", "/accounts", undefined, agency);
+    const cash = accounts.data.find((account: { name: string }) => account.name === "Cash");
+    expect(cash.currentBalance).toBe(5000);
+  });
+
+  it("can be undone, and says so afterwards", async () => {
+    const agency = await t.api.registerAgency("Undo");
+
+    const { body: imported } = await postWorkbook(
+      agency,
+      await buildWorkbook(),
+      "book.xlsx",
+      "/imports/foundations",
+    );
+
+    const undone = await t.api.ok(
+      "DELETE",
+      `/imports/${imported.data.importId}`,
+      undefined,
+      agency,
+    );
+    expect(undone.status).toBe("REVERTED");
+
+    const customers = await t.api.ok("GET", "/customers/dashboard", undefined, agency);
+    expect(customers.summary.totalCustomers).toBe(0);
+
+    const accounts = await t.api.ok("GET", "/accounts", undefined, agency);
+    expect(accounts.data).toEqual([]);
+
+    // The run itself stays on the list: what happened is part of the record.
+    const runs = await t.api.ok("GET", "/imports", undefined, agency);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ status: "REVERTED", stage: "FOUNDATIONS" });
+
+    const again = await t.api.delete(`/imports/${imported.data.importId}`, agency);
+    expect(again.status).toBe(400);
   });
 });

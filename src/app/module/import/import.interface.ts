@@ -49,3 +49,21 @@ export interface IImportPreview {
     capitalFlows: number;
   };
 }
+
+/** What one import run created. */
+export interface IFoundationsResult {
+  importId: string;
+  filename: string;
+  stage: "FOUNDATIONS" | "HISTORY";
+  counts: Record<string, number>;
+}
+
+export interface IImportRun {
+  id: string;
+  filename: string;
+  stage: "FOUNDATIONS" | "HISTORY";
+  status: "COMPLETED" | "REVERTED";
+  counts: Record<string, number>;
+  revertedAt: string | null;
+  createdAt: string;
+}
