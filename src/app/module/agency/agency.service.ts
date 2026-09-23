@@ -69,7 +69,8 @@ const updateProfile = async (agencyId: string, payload: IUpdateAgencyProfilePayl
     where: { id: agencyId },
     data: {
       name: payload.name,
-      email: payload.email,
+      // email is never written here — it is the address the agency registered
+      // with, and invoices and reminders are addressed to it.
       phone: payload.phone,
       address: payload.address,
       logo: payload.logo,

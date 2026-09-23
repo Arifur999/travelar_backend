@@ -141,6 +141,23 @@ describe("agency profile", () => {
     expect(sneaky.status).toBe(400);
   });
 
+  it("keeps the contact email the agency registered with", async () => {
+    const before = await t.api.ok("GET", "/agency/profile", undefined, owner);
+    expect(before.email).toBeTruthy();
+
+    // Sent by an old page, or by anyone poking the API: the field is stripped,
+    // and everything alongside it still saves.
+    const res = await t.api.patch(
+      "/agency/profile",
+      { email: "someone-else@example.test", phone: "+8801999999999" },
+      owner,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.email).toBe(before.email);
+    expect(res.body.data.phone).toBe("+8801999999999");
+  });
+
   it("staff can read it but not change it", async () => {
     const staff = await activeMember("AGENCY_STAFF");
     expect((await t.api.get("/agency/profile", staff.session)).status).toBe(200);
