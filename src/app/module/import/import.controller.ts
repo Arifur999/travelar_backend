@@ -5,7 +5,9 @@ import { requireAgencyId } from "../../middleware/tenantGuards.js";
 import catchAsync from "../../shared/catchAsync.js";
 import { sendResponse } from "../../shared/sendResponse.js";
 import { FoundationsImportService } from "./foundations.service.js";
+import { HistoryImportService } from "./history.service.js";
 import { ImportRunService } from "./importRun.service.js";
+import { ImportRunnerService } from "./importRunner.service.js";
 import { ImportService } from "./import.service.js";
 
 /**
@@ -57,6 +59,77 @@ const importFoundations = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+/**
+ * Writes the trading history on top of the lists.
+ *
+ * The answer carries the totals it wrote alongside the counts, because the
+ * first thing an owner does with imported books is check them against the
+ * figures printed at the top of their own spreadsheet.
+ */
+const importHistory = catchAsync(async (req: Request, res: Response) => {
+  const agencyId = requireAgencyId(req);
+
+  const file = req.file;
+  if (!file) {
+    throw new AppError(status.BAD_REQUEST, "Attach the spreadsheet as `file`");
+  }
+
+  const result = await HistoryImportService.importHistory(
+    agencyId,
+    file.originalname,
+    file.buffer,
+    req.user,
+  );
+
+  sendResponse(res, {
+    httpStatus: status.CREATED,
+    success: true,
+    message: "Your history was brought across",
+    data: result,
+  });
+});
+
+/**
+ * Brings the whole workbook across: the lists, then the history on top.
+ *
+ * Answers as soon as the run has started, not when it has finished — a year of
+ * business takes minutes, and the screen follows the run by its id.
+ */
+const startImport = catchAsync(async (req: Request, res: Response) => {
+  const agencyId = requireAgencyId(req);
+
+  const file = req.file;
+  if (!file) {
+    throw new AppError(status.BAD_REQUEST, "Attach the spreadsheet as `file`");
+  }
+
+  const result = await ImportRunnerService.start(agencyId, file.originalname, file.buffer, req.user, {
+    // Uploading the same workbook again is a mistake often enough that it is
+    // refused by default, and has to be asked for twice.
+    force: req.body?.force === "true" || req.body?.force === true,
+  });
+
+  sendResponse(res, {
+    httpStatus: result.alreadyImported ? status.OK : status.ACCEPTED,
+    success: true,
+    message: result.alreadyImported
+      ? "This spreadsheet has already been brought in"
+      : "Bringing your spreadsheet in — this page will follow along",
+    data: result,
+  });
+});
+
+const getRun = catchAsync(async (req: Request, res: Response) => {
+  const result = await ImportRunService.getRun(requireAgencyId(req), req.params.id as string);
+
+  sendResponse(res, {
+    httpStatus: status.OK,
+    success: true,
+    message: "Import fetched successfully",
+    data: result,
+  });
+});
+
 const listRuns = catchAsync(async (req: Request, res: Response) => {
   const result = await ImportRunService.listRuns(requireAgencyId(req));
 
@@ -79,4 +152,12 @@ const revertRun = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-export const ImportController = { preview, importFoundations, listRuns, revertRun };
+export const ImportController = {
+  preview,
+  startImport,
+  importFoundations,
+  importHistory,
+  getRun,
+  listRuns,
+  revertRun,
+};

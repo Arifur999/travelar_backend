@@ -16,6 +16,7 @@ export type ImportKind =
   | "expenses"
   | "masterData"
   | "capital"
+  | "profitWithdrawals"
   | "accounts";
 
 export interface FieldSpec {
@@ -25,6 +26,14 @@ export interface FieldSpec {
   labels: string[];
   /** A row missing this one cannot be imported. */
   required?: boolean;
+  /**
+   * Look for this column only to the right of the one these labels name.
+   *
+   * Several of these tabs put a summary, the table itself and a report side
+   * by side on one heading row, each with its own "Amount". Anchoring to a
+   * column only the table has is what tells them apart.
+   */
+  after?: string[];
   type: "text" | "money" | "date" | "number";
 }
 
@@ -67,6 +76,22 @@ export const TAB_SPECS: TabSpec[] = [
       // Not "date change fee": that is the start of "Date Change Fee cost",
       // the supplier side, and both columns would have read the same number.
       { field: "dateChangeFee", labels: ["change customer fee", "customer fee"], type: "money" },
+      // The date-change block repeats the payment columns further right, under
+      // its own heading. Without the anchor both pairs read the first block,
+      // and the money taken for the change would never be banked.
+      { field: "dateChangeDate", labels: ["date"], after: ["status"], type: "date" },
+      {
+        field: "dateChangePaid",
+        labels: ["payment received amount", "payment received"],
+        after: ["date change customer fee", "change customer fee"],
+        type: "money",
+      },
+      {
+        field: "dateChangePaidInto",
+        labels: ["received method", "payment method"],
+        after: ["date change customer fee", "change customer fee"],
+        type: "text",
+      },
     ],
   },
   {
@@ -78,7 +103,7 @@ export const TAB_SPECS: TabSpec[] = [
       { field: "date", labels: ["date"], required: true, type: "date" },
       { field: "customerName", labels: ["customer"], required: true, type: "text" },
       { field: "customerPhone", labels: ["phone"], type: "text" },
-      { field: "amount", labels: ["amount"], required: true, type: "money" },
+      { field: "amount", labels: ["amount"], after: ["date"], required: true, type: "money" },
       { field: "intoAccount", labels: ["to account", "account"], required: true, type: "text" },
       { field: "note", labels: ["details", "note"], type: "text" },
     ],
@@ -92,7 +117,7 @@ export const TAB_SPECS: TabSpec[] = [
       { field: "date", labels: ["date"], required: true, type: "date" },
       { field: "supplierName", labels: ["agency name", "supplier"], required: true, type: "text" },
       { field: "contactName", labels: ["contact name", "contact"], type: "text" },
-      { field: "amount", labels: ["amount"], required: true, type: "money" },
+      { field: "amount", labels: ["amount"], after: ["date"], required: true, type: "money" },
       { field: "fromAccount", labels: ["bank account", "from account", "account"], required: true, type: "text" },
       { field: "note", labels: ["details", "note"], type: "text" },
     ],
@@ -105,7 +130,10 @@ export const TAB_SPECS: TabSpec[] = [
     fields: [
       { field: "date", labels: ["date"], required: true, type: "date" },
       { field: "fromAccount", labels: ["form account", "from account", "account"], required: true, type: "text" },
-      { field: "amount", labels: ["amount"], required: true, type: "money" },
+      // The tab's left-hand summary heads a column "Amount" too, and that one
+      // holds a whole category's total. Reading it would have turned a year of
+      // office rent into a single day's expense.
+      { field: "amount", labels: ["amount"], after: ["date"], required: true, type: "money" },
       { field: "category", labels: ["category"], required: true, type: "text" },
       { field: "note", labels: ["details", "note"], type: "text" },
     ],
@@ -137,14 +165,35 @@ export const TAB_SPECS: TabSpec[] = [
   },
   {
     kind: "capital",
-    tabNames: ["investwithdraw", "invest withdraw", "profit withdraw"],
+    tabNames: ["investwithdraw", "invest withdraw"],
     title: "Investment and withdrawals",
-    creates: "owner investment in, and money taken out",
+    creates: "what the owners put in, and what they took back out",
+    // Money in and money out sit in two columns side by side, and a row fills
+    // one of them. One "amount" column would have read every withdrawal as an
+    // investment of nothing.
     fields: [
       { field: "date", labels: ["date"], required: true, type: "date" },
-      { field: "personName", labels: ["name", "received person"], required: true, type: "text" },
-      { field: "amount", labels: ["investment", "amount", "withdraw"], required: true, type: "money" },
-      { field: "account", labels: ["methode", "method", "form account", "account"], type: "text" },
+      { field: "personName", labels: ["name", "owner"], required: true, type: "text" },
+      { field: "investment", labels: ["investment", "invest"], after: ["date"], type: "money" },
+      { field: "withdraw", labels: ["withdraw"], after: ["investment", "invest"], type: "money" },
+      {
+        field: "account",
+        labels: ["deposited acc", "methode", "method", "form account", "account"],
+        type: "text",
+      },
+      { field: "note", labels: ["details", "note"], type: "text" },
+    ],
+  },
+  {
+    kind: "profitWithdrawals",
+    tabNames: ["profit withdraw"],
+    title: "Profit Withdraw",
+    creates: "profit taken out of the business",
+    fields: [
+      { field: "date", labels: ["date"], required: true, type: "date" },
+      { field: "receivedBy", labels: ["received person", "received", "person"], required: true, type: "text" },
+      { field: "amount", labels: ["amount"], after: ["date"], required: true, type: "money" },
+      { field: "fromAccount", labels: ["form account", "from account", "account"], required: true, type: "text" },
       { field: "note", labels: ["details", "note"], type: "text" },
     ],
   },

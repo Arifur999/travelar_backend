@@ -221,3 +221,51 @@ export const dateAt = (row: SheetRow, index: number | null): Date | null => {
 /** Whether a row holds anything worth reading, given the columns that matter. */
 export const hasAnyOf = (row: SheetRow, indexes: (number | null)[]) =>
   indexes.some((index) => index !== null && textAt(row, index) !== null);
+
+/**
+ * The same label, but the one further right.
+ *
+ * These sheets lay several blocks side by side on one heading row: the Expense
+ * tab names a column "Amount" in its summary, again in the transaction table
+ * and again in its report. Asking for "amount" gets the summary's, and the
+ * import would have read a category total as one expense. Anchoring to a
+ * column that only the real table has — its Date — picks out the right one.
+ */
+export const columnOfAfter = (
+  header: SheetRow,
+  labels: string[],
+  afterLabels: string[],
+): number | null => {
+  const anchor = columnOf(header, afterLabels);
+  if (anchor === null) return columnOf(header, labels);
+
+  const tail: SheetRow = {
+    number: header.number,
+    cells: header.cells.map((cell, index) => (index > anchor ? cell : null)),
+  };
+
+  return columnOf(tail, labels) ?? columnOf(header, labels);
+};
+
+/** What a caller wants found on a heading row. */
+export interface ColumnWanted {
+  field: string;
+  labels: string[];
+  /** Look only to the right of this column — see columnOfAfter. */
+  after?: string[];
+}
+
+/** Every column a spec asks for, resolved once so readers and writers agree. */
+export const resolveColumns = (
+  header: SheetRow,
+  wanted: ColumnWanted[],
+): Map<string, number | null> => {
+  const found = new Map<string, number | null>();
+  for (const column of wanted) {
+    found.set(
+      column.field,
+      column.after ? columnOfAfter(header, column.labels, column.after) : columnOf(header, column.labels),
+    );
+  }
+  return found;
+};

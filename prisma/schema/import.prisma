@@ -13,11 +13,27 @@ model DataImport {
   filename    String
   /// What the run was for: the master lists, or the history on top of them.
   stage       ImportStage
-  status      ImportStatus     @default(COMPLETED)
+  status      ImportStatus     @default(RUNNING)
+
+  /// SHA-256 of the uploaded file. The same workbook uploaded twice is almost
+  /// always a mistake — the same click twice, or a second person not knowing
+  /// the first had done it — and this is what lets the screen say so before
+  /// anything is written rather than after.
+  fileHash    String?
 
   /// What it created, by kind — the same figures the preview promised, kept
   /// so the two can be compared after the fact.
   counts      Json
+
+  /// How far along, while it is running: which step, and how many rows of it
+  /// are done. Written as the run goes, so the screen has something true to
+  /// show instead of a spinner that means nothing.
+  progress    Json?
+
+  /// The finished report: the totals it wrote and the rows it could not.
+  /// Kept because the run outlives the request that started it, and the owner
+  /// will want to read it again tomorrow.
+  result      Json?
 
   /// Set when the run was rolled back, so the record stays and the reason with it.
   revertedAt  DateTime?
@@ -32,6 +48,7 @@ model DataImport {
 
   @@index([agencyId])
   @@index([agencyId, createdAt])
+  @@index([agencyId, fileHash])
   @@map("data_imports")
 }
 

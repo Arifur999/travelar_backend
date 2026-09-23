@@ -140,14 +140,22 @@ enum HotelBookingStatus {
 }
 
 /// What an import run was carrying. The master lists have to exist before
-/// the history that points at them, so a run is one or the other.
+/// the history that points at them, so a run is one stage or the other — or
+/// EVERYTHING, which is the two back to back and what the screen actually
+/// offers, because an agency moving in wants one button.
 enum ImportStage {
   FOUNDATIONS
   HISTORY
+  EVERYTHING
 }
 
+/// A run takes minutes on a real workbook, so it is not over when the request
+/// is: RUNNING is the normal state for a while, and the screen watches for it
+/// to change.
 enum ImportStatus {
+  RUNNING
   COMPLETED
+  FAILED
   REVERTED
 }
 

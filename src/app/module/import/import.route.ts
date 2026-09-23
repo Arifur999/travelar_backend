@@ -30,11 +30,17 @@ router.use(checkAuth(Role.AGENCY_ADMIN), requireActiveSubscription);
 
 router.post("/preview", upload.single("file"), ImportController.preview);
 
-// The lists first: accounts, categories, airlines, suppliers, customers.
-// The history that points at them comes after, in its own run.
+// The one the screen uses: lists and history, in order, as a single run that
+// answers immediately and reports its own progress.
+router.post("/run", upload.single("file"), ImportController.startImport);
+
+// The two stages on their own, for a run that has to be done in halves — a
+// sheet whose lists were fixed by hand between them, say.
 router.post("/foundations", upload.single("file"), ImportController.importFoundations);
+router.post("/history", upload.single("file"), ImportController.importHistory);
 
 router.get("/", ImportController.listRuns);
+router.get("/:id", ImportController.getRun);
 router.delete("/:id", ImportController.revertRun);
 
 export const ImportRoutes = router;

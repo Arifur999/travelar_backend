@@ -7,9 +7,11 @@ import { AirlineMasterService } from "../airlineMaster/airlineMaster.service.js"
 import { CashAccountService } from "../cashAccount/cashAccount.service.js";
 import { CustomerService } from "../customer/customer.service.js";
 import { ExpenseService } from "../expense/expense.service.js";
+import { RouteMasterService } from "../routeMaster/routeMaster.service.js";
 import { SupplierService } from "../supplier/supplier.service.js";
 import { TAB_SPECS } from "./import.constant.js";
-import { IFoundationsResult } from "./import.interface.js";
+import { IFoundationsResult, IImportedRecord, IRunContext } from "./import.interface.js";
+import { ImportRunService } from "./importRun.service.js";
 import {
   columnOf,
   findHeaderRow,
@@ -41,13 +43,6 @@ const normalise = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCa
 
 /** A phone as a key: digits only, so 017-1234 and 0171234 are one person. */
 const phoneKey = (phone: string | null) => (phone ? phone.replace(/\D/g, "") : "");
-
-interface Recorded {
-  entity: string;
-  entityId: string;
-  sourceTab?: string;
-  sourceRow?: number;
-}
 
 const sheetFor = (sheets: SheetData[], kind: string): SheetData | undefined => {
   const spec = TAB_SPECS.find((candidate) => candidate.kind === kind);
@@ -161,7 +156,8 @@ const importAccounts = async (
   agencyId: string,
   sheets: SheetData[],
   user: IRequestUser,
-  recorded: Recorded[],
+  recorded: IImportedRecord[],
+  report: IRunContext["report"],
 ) => {
   const existing = await prisma.cashAccount.findMany({
     where: { agencyId },
@@ -169,8 +165,12 @@ const importAccounts = async (
   });
   const known = new Set(existing.map((account) => normalise(account.name)));
 
+  const wanted = collectAccountNames(sheets);
   let created = 0;
-  for (const account of collectAccountNames(sheets)) {
+  let seen = 0;
+
+  for (const account of wanted) {
+    report("Accounts", (seen += 1), wanted.length);
     if (known.has(normalise(account.name))) continue;
 
     const madeAccount = await CashAccountService.createCashAccount(
@@ -202,7 +202,8 @@ const importAccounts = async (
 const importExpenseCategories = async (
   agencyId: string,
   sheets: SheetData[],
-  recorded: Recorded[],
+  recorded: IImportedRecord[],
+  report: IRunContext["report"],
 ) => {
   const table = readTable(sheetFor(sheets, "expenses"), [
     ["category"],
@@ -218,7 +219,10 @@ const importExpenseCategories = async (
   const known = new Set(existing.map((category) => normalise(category.name)));
 
   let created = 0;
+  let seen = 0;
+
   for (const { value, row } of names) {
+    report("Expense categories", (seen += 1), names.length);
     if (known.has(normalise(value))) continue;
 
     const category = await ExpenseService.createCategory(agencyId, { name: value });
@@ -234,7 +238,8 @@ const importAirlines = async (
   agencyId: string,
   sheets: SheetData[],
   user: IRequestUser,
-  recorded: Recorded[],
+  recorded: IImportedRecord[],
+  report: IRunContext["report"],
 ) => {
   const sheet = sheetFor(sheets, "masterData");
   const table = readTable(sheet, [
@@ -259,7 +264,10 @@ const importAirlines = async (
   const knownNames = new Set(existing.map((airline) => normalise(airline.name)));
 
   let created = 0;
+  let seen = 0;
+
   for (const row of table.rows) {
+    report("Airlines", (seen += 1), table.rows.length);
     const code = textAt(row, codeIndex);
     const name = textAt(row, nameIndex);
     if (!code || !name) continue;
@@ -296,7 +304,8 @@ const importSuppliers = async (
   agencyId: string,
   sheets: SheetData[],
   user: IRequestUser,
-  recorded: Recorded[],
+  recorded: IImportedRecord[],
+  report: IRunContext["report"],
 ) => {
   const masterData = sheetFor(sheets, "masterData");
   const masterTable = readTable(masterData, [["agency name"], ["contact name"]]);
@@ -347,7 +356,10 @@ const importSuppliers = async (
   const known = new Set(existing.map((supplier) => normalise(supplier.name)));
 
   let created = 0;
+  let seen = 0;
+
   for (const supplier of details.values()) {
+    report("Suppliers", (seen += 1), details.size);
     if (known.has(normalise(supplier.name))) continue;
 
     const made = await SupplierService.createSupplier(
@@ -378,6 +390,48 @@ const importSuppliers = async (
 };
 
 /**
+ * The sectors flown, as the agency writes them: "DAC-SIN", "YYZ-DAC-YYZ".
+ *
+ * They only exist on the sales rows, so the list is whatever those rows use.
+ * A ticket can be imported without one, but then the agency loses the sector
+ * on every historic booking — which is half of what they look a booking up by.
+ */
+const importRoutes = async (
+  agencyId: string,
+  sheets: SheetData[],
+  user: IRequestUser,
+  recorded: IImportedRecord[],
+  report: IRunContext["report"],
+) => {
+  const sales = sheetFor(sheets, "sales");
+  const table = readTable(sales, [["pnr"], ["route"], ["full name"]]);
+  const names = valuesUnder(table, ["route"]);
+
+  const existing = await prisma.routeMaster.findMany({
+    where: { agencyId, isDeleted: false },
+    select: { name: true },
+  });
+  const known = new Set(existing.map((route) => normalise(route.name)));
+
+  let created = 0;
+  let seen = 0;
+
+  for (const { value, row } of names) {
+    report("Routes", (seen += 1), names.length);
+    const name = value.trim();
+    if (name.length > 120 || known.has(normalise(name))) continue;
+    if (looksLikeHeading(name)) continue;
+
+    const route = await RouteMasterService.createRoute(agencyId, { name }, user);
+    known.add(normalise(name));
+    created += 1;
+    recorded.push({ entity: "route", entityId: route.id, sourceTab: sales?.name, sourceRow: row });
+  }
+
+  return created;
+};
+
+/**
  * Customers, gathered from every tab that names one.
  *
  * Matched on the phone number where there is one, because that is the only
@@ -389,7 +443,8 @@ const importCustomers = async (
   agencyId: string,
   sheets: SheetData[],
   user: IRequestUser,
-  recorded: Recorded[],
+  recorded: IImportedRecord[],
+  report: IRunContext["report"],
 ) => {
   interface Candidate {
     name: string;
@@ -450,6 +505,7 @@ const importCustomers = async (
 
   for (const candidate of byKey.values()) {
     index += 1;
+    report("Customers", index, byKey.size);
     const key = phoneKey(candidate.phone);
     if (key && knownPhones.has(key)) continue;
     if (!key && knownNames.has(normalise(candidate.name))) continue;
@@ -499,6 +555,7 @@ const importFoundations = async (
   filename: string,
   file: Buffer,
   user: IRequestUser,
+  ctx?: IRunContext,
 ): Promise<IFoundationsResult> => {
   if (!file || file.length === 0) throw new AppError(status.BAD_REQUEST, "The file is empty");
 
@@ -512,40 +569,35 @@ const importFoundations = async (
     );
   }
 
-  const recorded: Recorded[] = [];
+  const recorded: IImportedRecord[] = [];
+  const report = ctx?.report ?? (() => {});
 
-  const accounts = await importAccounts(agencyId, sheets, user, recorded);
-  const expenseCategories = await importExpenseCategories(agencyId, sheets, recorded);
-  const airlines = await importAirlines(agencyId, sheets, user, recorded);
-  const suppliers = await importSuppliers(agencyId, sheets, user, recorded);
-  const customers = await importCustomers(agencyId, sheets, user, recorded);
+  const accounts = await importAccounts(agencyId, sheets, user, recorded, report);
+  const expenseCategories = await importExpenseCategories(agencyId, sheets, recorded, report);
+  const airlines = await importAirlines(agencyId, sheets, user, recorded, report);
+  const routes = await importRoutes(agencyId, sheets, user, recorded, report);
+  const suppliers = await importSuppliers(agencyId, sheets, user, recorded, report);
+  const customers = await importCustomers(agencyId, sheets, user, recorded, report);
 
-  const counts = { accounts, expenseCategories, airlines, suppliers, customers };
+  const counts = { accounts, expenseCategories, airlines, routes, suppliers, customers };
 
-  const run = await prisma.dataImport.create({
-    data: {
-      agencyId,
-      filename,
-      stage: ImportStage.FOUNDATIONS,
-      counts,
-      createdById: user.userId,
-    },
-  });
-
-  if (recorded.length > 0) {
-    await prisma.importedRecord.createMany({
-      data: recorded.map((record) => ({
-        agencyId,
-        importId: run.id,
-        entity: record.entity,
-        entityId: record.entityId,
-        sourceTab: record.sourceTab,
-        sourceRow: record.sourceRow,
-      })),
-    });
+  // Half of a longer run writes against the record that run already opened, so
+  // the whole upload is one thing to undo.
+  if (ctx) {
+    await ImportRunService.attachRecords(agencyId, ctx.importId, recorded);
+    return { importId: ctx.importId, filename, stage: "FOUNDATIONS", counts };
   }
 
-  return { importId: run.id, filename, stage: "FOUNDATIONS", counts };
+  const importId = await ImportRunService.recordRun({
+    agencyId,
+    filename,
+    stage: ImportStage.FOUNDATIONS,
+    counts,
+    user,
+    recorded,
+  });
+
+  return { importId, filename, stage: "FOUNDATIONS", counts };
 };
 
 export const FoundationsImportService = { importFoundations };

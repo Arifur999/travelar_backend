@@ -27,6 +27,9 @@ export interface ITabPreview {
   sample: Record<string, string | number | null>[];
   /** Money columns totalled, so they can be checked against the sheet. */
   totals: Record<string, number>;
+  /** How many rows carry a figure in each money column, which is not the
+   * row count: most sales rows have no date-change fee. */
+  rowsWith: Record<string, number>;
 }
 
 export interface IImportPreview {
@@ -47,7 +50,43 @@ export interface IImportPreview {
     supplierPayments: number;
     expenses: number;
     capitalFlows: number;
+    profitWithdrawals: number;
   };
+}
+
+/**
+ * How far a run has got.
+ *
+ * Named steps rather than a bare percentage: "Air tickets, 1,240 of 3,180" is
+ * something an owner can wait through, where a bar creeping along on its own
+ * only raises the question of whether anything is happening at all.
+ */
+export interface IImportProgress {
+  step: string;
+  stepNumber: number;
+  stepCount: number;
+  done: number;
+  total: number;
+  /** 0–100, what the bar shows. */
+  percent: number;
+}
+
+/**
+ * Passed to a stage when it is one half of a longer run: the record to attach
+ * its rows to, and where to say how far it has got.
+ */
+export interface IRunContext {
+  importId: string;
+  report: (step: string, done: number, total: number) => void;
+}
+
+/** One row an import created, and the line of the sheet it came from. */
+export interface IImportedRecord {
+  /** Which table, as the rollback knows it: "customer", "ticket", … */
+  entity: string;
+  entityId: string;
+  sourceTab?: string;
+  sourceRow?: number;
 }
 
 /** What one import run created. */
@@ -58,12 +97,52 @@ export interface IFoundationsResult {
   counts: Record<string, number>;
 }
 
+/** A problem, and the tab it was on — a history run reads every tab. */
+export interface ITabProblem extends IRowProblem {
+  tab: string;
+}
+
+/**
+ * What the history run wrote, and what it could not.
+ *
+ * `totals` is the point of the report: the same figures the spreadsheet prints
+ * at the top of its own tabs, recomputed from what was actually imported, so
+ * the two can be put side by side before anyone trusts the new books.
+ */
+export interface IHistoryResult {
+  importId: string;
+  filename: string;
+  stage: "HISTORY";
+  counts: Record<string, number>;
+  /** Rows already in the books from an earlier run, and left alone. */
+  skipped: Record<string, number>;
+  totals: Record<string, number>;
+  problems: ITabProblem[];
+}
+
 export interface IImportRun {
   id: string;
   filename: string;
-  stage: "FOUNDATIONS" | "HISTORY";
-  status: "COMPLETED" | "REVERTED";
+  stage: "FOUNDATIONS" | "HISTORY" | "EVERYTHING";
+  status: "RUNNING" | "COMPLETED" | "FAILED" | "REVERTED";
   counts: Record<string, number>;
+  progress: IImportProgress | null;
+  /** The finished report, once there is one. */
+  result: {
+    totals?: Record<string, number>;
+    skipped?: Record<string, number>;
+    problems?: ITabProblem[];
+  } | null;
+  /** Why it failed, when it did. */
+  note: string | null;
   revertedAt: string | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+/** What starting a run answers with, before any of the work is done. */
+export interface IImportStarted {
+  importId: string;
+  /** Set when this exact file has been imported before and was not undone. */
+  alreadyImported: IImportRun | null;
 }

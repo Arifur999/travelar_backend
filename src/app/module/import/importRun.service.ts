@@ -1,8 +1,10 @@
 import status from "http-status";
 import { ImportStatus, Prisma } from "../../../generated/prisma/client.js";
+import { ImportStage, PostingSource } from "../../../generated/prisma/enums.js";
+import { IRequestUser } from "../../interfaces/requestUser.interface.js";
 import AppError from "../../errorHelpers/AppError.js";
 import { prisma } from "../../lib/prisma.js";
-import { IImportRun } from "./import.interface.js";
+import { IImportedRecord, IImportRun } from "./import.interface.js";
 
 /**
  * What has been imported, and undoing one of them.
@@ -16,24 +18,95 @@ import { IImportRun } from "./import.interface.js";
 type Tx = Prisma.TransactionClient;
 
 /**
- * The order things are deleted in, children first.
+ * The order things are deleted in, children first, and the ledger entries each
+ * kind owns.
  *
  * A supplier cannot go while a payment points at it, and an account cannot go
- * while anything posted to it. Getting this order wrong shows up as a foreign
- * key error mid-rollback, which would leave the books half-undone.
+ * while anything is posted to it. Getting this order wrong shows up as a
+ * foreign key error mid-rollback, which would leave the books half-undone.
+ *
+ * The postings matter as much as the rows. A posting has no foreign key to
+ * what caused it — it carries (source, sourceId) instead, deliberately, so one
+ * table can record movements from a dozen others. Nothing therefore cascades:
+ * deleting a payment on its own would leave its money on the balance sheet
+ * for ever, with no row left to explain it. Each kind names its own sources
+ * here, and they go first.
  */
-const DELETE_ORDER: { entity: string; remove: (tx: Tx, ids: string[], agencyId: string) => Promise<unknown> }[] = [
-  { entity: "ticketPayment", remove: (tx, ids, agencyId) => tx.ticketPayment.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "dueReceived", remove: (tx, ids, agencyId) => tx.dueReceived.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "supplierTransaction", remove: (tx, ids, agencyId) => tx.supplierTransaction.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "expense", remove: (tx, ids, agencyId) => tx.expense.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "capitalFlow", remove: (tx, ids, agencyId) => tx.capitalFlow.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "ticket", remove: (tx, ids, agencyId) => tx.ticket.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "customer", remove: (tx, ids, agencyId) => tx.customer.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "supplier", remove: (tx, ids, agencyId) => tx.supplier.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "airline", remove: (tx, ids, agencyId) => tx.airlineMaster.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "expenseCategory", remove: (tx, ids, agencyId) => tx.expenseCategory.deleteMany({ where: { agencyId, id: { in: ids } } }) },
-  { entity: "cashAccount", remove: (tx, ids, agencyId) => tx.cashAccount.deleteMany({ where: { agencyId, id: { in: ids } } }) },
+const DELETE_ORDER: {
+  entity: string;
+  sources: PostingSource[];
+  remove: (tx: Tx, ids: string[], agencyId: string) => Promise<unknown>;
+}[] = [
+  {
+    entity: "ticketPayment",
+    // A payment settled from the customer's wallet posted nothing, so there
+    // may be no row to delete; deleteMany simply matches none.
+    sources: [PostingSource.SALES_PAYMENT],
+    remove: (tx, ids, agencyId) => tx.ticketPayment.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "dueReceived",
+    sources: [PostingSource.DUE_RECEIVED],
+    remove: (tx, ids, agencyId) => tx.dueReceived.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "supplierTransaction",
+    sources: [PostingSource.SUPPLIER_PAYMENT],
+    remove: (tx, ids, agencyId) => tx.supplierTransaction.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "expense",
+    sources: [PostingSource.EXPENSE],
+    remove: (tx, ids, agencyId) => tx.expense.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "capitalFlow",
+    sources: [PostingSource.INVESTMENT, PostingSource.INVESTMENT_WITHDRAWAL],
+    remove: (tx, ids, agencyId) => tx.capitalFlow.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "profitWithdrawal",
+    sources: [PostingSource.PROFIT_WITHDRAWAL],
+    remove: (tx, ids, agencyId) => tx.profitWithdrawal.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "ticket",
+    sources: [PostingSource.DATE_CHANGE_FEE],
+    remove: (tx, ids, agencyId) => tx.ticket.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "route",
+    sources: [],
+    remove: (tx, ids, agencyId) => tx.routeMaster.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "customer",
+    sources: [],
+    remove: (tx, ids, agencyId) => tx.customer.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "supplier",
+    sources: [],
+    remove: (tx, ids, agencyId) => tx.supplier.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "airline",
+    sources: [],
+    remove: (tx, ids, agencyId) => tx.airlineMaster.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "expenseCategory",
+    sources: [],
+    remove: (tx, ids, agencyId) => tx.expenseCategory.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
+  {
+    entity: "cashAccount",
+    // Its opening balance is a posting like any other, and the account's own
+    // foreign key is Restrict — so the opening row has to go first or the
+    // account cannot be deleted at all.
+    sources: [PostingSource.OPENING],
+    remove: (tx, ids, agencyId) => tx.cashAccount.deleteMany({ where: { agencyId, id: { in: ids } } }),
+  },
 ];
 
 const toRun = (run: {
@@ -42,17 +115,77 @@ const toRun = (run: {
   stage: string;
   status: string;
   counts: Prisma.JsonValue;
+  progress: Prisma.JsonValue;
+  result: Prisma.JsonValue;
+  note: string | null;
   revertedAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
 }): IImportRun => ({
   id: run.id,
   filename: run.filename,
   stage: run.stage as IImportRun["stage"],
   status: run.status as IImportRun["status"],
   counts: (run.counts ?? {}) as Record<string, number>,
+  progress: (run.progress ?? null) as IImportRun["progress"],
+  result: (run.result ?? null) as IImportRun["result"],
+  note: run.note,
   revertedAt: run.revertedAt ? run.revertedAt.toISOString() : null,
   createdAt: run.createdAt.toISOString(),
+  updatedAt: run.updatedAt.toISOString(),
 });
+
+/**
+ * Writes down a finished run and every row it created.
+ *
+ * Both stages end here rather than each writing its own record, because the
+ * rollback reads one list and one list only — a stage that forgot to add to it
+ * would be a stage nobody could undo.
+ */
+const recordRun = async (input: {
+  agencyId: string;
+  filename: string;
+  stage: ImportStage;
+  counts: Record<string, number>;
+  user: IRequestUser;
+  recorded: IImportedRecord[];
+}): Promise<string> => {
+  const run = await prisma.dataImport.create({
+    data: {
+      agencyId: input.agencyId,
+      filename: input.filename,
+      stage: input.stage,
+      status: ImportStatus.COMPLETED,
+      counts: input.counts,
+      createdById: input.user.userId,
+    },
+  });
+
+  await attachRecords(input.agencyId, run.id, input.recorded);
+  return run.id;
+};
+
+/**
+ * Adds rows to an existing run's list.
+ *
+ * A stage that is half of a longer run writes against the run that started it,
+ * so the whole upload is one thing to undo — which is how the owner thinks of
+ * it, having pressed one button.
+ */
+const attachRecords = async (agencyId: string, importId: string, recorded: IImportedRecord[]) => {
+  if (recorded.length === 0) return;
+
+  await prisma.importedRecord.createMany({
+    data: recorded.map((record) => ({
+      agencyId,
+      importId,
+      entity: record.entity,
+      entityId: record.entityId,
+      sourceTab: record.sourceTab,
+      sourceRow: record.sourceRow,
+    })),
+  });
+};
 
 const listRuns = async (agencyId: string): Promise<IImportRun[]> => {
   const runs = await prisma.dataImport.findMany({
@@ -64,19 +197,28 @@ const listRuns = async (agencyId: string): Promise<IImportRun[]> => {
   return runs.map(toRun);
 };
 
+/** One run, which is what the screen polls while the bar is moving. */
+const getRun = async (agencyId: string, importId: string): Promise<IImportRun> => {
+  const run = await prisma.dataImport.findFirst({ where: { id: importId, agencyId } });
+  if (!run) throw new AppError(status.NOT_FOUND, "Import not found");
+  return toRun(run);
+};
+
 /**
- * Deletes everything one run created.
+ * Deletes everything one run created, and the ledger entries that went with it.
  *
- * Postings go with their rows: every money row here was created through a
- * service that posted to an account, and those postings carry the row's id as
- * their sourceId, so deleting the row cascades them away. An account's own
- * opening posting goes when the account does.
+ * Nothing the agency typed in itself is touched: the run's own list of what it
+ * created is the only thing consulted.
  */
 const revertRun = async (agencyId: string, importId: string): Promise<IImportRun> => {
   const run = await prisma.dataImport.findFirst({ where: { id: importId, agencyId } });
   if (!run) throw new AppError(status.NOT_FOUND, "Import not found");
   if (run.status === ImportStatus.REVERTED) {
     throw new AppError(status.BAD_REQUEST, "This import has already been undone");
+  }
+  if (run.status === ImportStatus.RUNNING) {
+    // Undoing half-written books would race the run still writing them.
+    throw new AppError(status.BAD_REQUEST, "This import is still running — wait for it to finish first");
   }
 
   const records = await prisma.importedRecord.findMany({
@@ -90,11 +232,16 @@ const revertRun = async (agencyId: string, importId: string): Promise<IImportRun
   }
 
   await prisma.$transaction(async (tx) => {
-    for (const { entity, remove } of DELETE_ORDER) {
+    for (const { entity, sources, remove } of DELETE_ORDER) {
       const ids = byEntity.get(entity);
       if (!ids || ids.length === 0) continue;
 
       try {
+        if (sources.length > 0) {
+          await tx.accountPosting.deleteMany({
+            where: { agencyId, source: { in: sources }, sourceId: { in: ids } },
+          });
+        }
         await remove(tx, ids, agencyId);
       } catch {
         // Something created by the import has been used since — a ticket sold
@@ -118,4 +265,4 @@ const revertRun = async (agencyId: string, importId: string): Promise<IImportRun
   return toRun(updated);
 };
 
-export const ImportRunService = { listRuns, revertRun };
+export const ImportRunService = { recordRun, attachRecords, listRuns, getRun, revertRun };

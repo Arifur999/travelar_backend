@@ -14,6 +14,7 @@ import {
   hasAnyOf,
   moneyAt,
   readWorkbook,
+  resolveColumns,
   textAt,
   type SheetData,
   type SheetRow,
@@ -72,6 +73,7 @@ const previewTab = (sheet: SheetData): ITabPreview => {
       problems: [],
       sample: [],
       totals: {},
+      rowsWith: {},
     };
   }
 
@@ -100,16 +102,16 @@ const previewTab = (sheet: SheetData): ITabPreview => {
       ],
       sample: [],
       totals: {},
+      rowsWith: {},
     };
   }
 
-  const indexes = new Map<string, number | null>();
+  const indexes = resolveColumns(header, spec.fields);
   const mapped: Record<string, string> = {};
   const unmapped: string[] = [];
 
   for (const field of spec.fields) {
-    const index = columnOf(header, field.labels);
-    indexes.set(field.field, index);
+    const index = indexes.get(field.field) ?? null;
     if (index === null) unmapped.push(field.field);
     else mapped[field.field] = String(header.cells[index] ?? "").trim();
   }
@@ -121,6 +123,7 @@ const previewTab = (sheet: SheetData): ITabPreview => {
   const problems: IRowProblem[] = [];
   const sample: Record<string, string | number | null>[] = [];
   const totals: Record<string, number> = {};
+  const rowsWith: Record<string, number> = {};
   let dataRows = 0;
   let readyRows = 0;
 
@@ -154,6 +157,7 @@ const previewTab = (sheet: SheetData): ITabPreview => {
 
       if (field.type === "money" && typeof value === "number") {
         totals[field.field] = (totals[field.field] ?? 0) + value;
+        if (value !== 0) rowsWith[field.field] = (rowsWith[field.field] ?? 0) + 1;
       }
 
       read[field.field] = forDisplay(value);
@@ -176,6 +180,7 @@ const previewTab = (sheet: SheetData): ITabPreview => {
     // readyRows, and the first fifty are enough to see the pattern.
     problems: problems.slice(0, 50),
     sample,
+    rowsWith,
     totals: Object.fromEntries(
       Object.entries(totals).map(([field, total]) => [field, Math.round(total * 100) / 100]),
     ),
@@ -292,12 +297,15 @@ const preview = async (filename: string, file: Buffer): Promise<IImportPreview> 
       accounts: bySpec("accounts")?.dataRows ?? 0,
       expenseCategories: distinctCount(sheetFor("expenses"), ["category"], ["amount", "date"]),
       tickets: salesTab?.readyRows ?? 0,
-      // A sale row carries its own payment when money was taken against it.
-      ticketPayments: salesTab ? Math.round(salesTab.totals.paidAmount ? salesTab.readyRows : 0) : 0,
+      // A sale row carries its own payment when money was taken against it,
+      // and a second one when its date was changed.
+      ticketPayments:
+        (salesTab?.rowsWith.paidAmount ?? 0) + (salesTab?.rowsWith.dateChangePaid ?? 0),
       collections: bySpec("collections")?.readyRows ?? 0,
       supplierPayments: bySpec("supplierPayments")?.readyRows ?? 0,
       expenses: bySpec("expenses")?.readyRows ?? 0,
       capitalFlows: bySpec("capital")?.readyRows ?? 0,
+      profitWithdrawals: bySpec("profitWithdrawals")?.readyRows ?? 0,
     },
   };
 };
