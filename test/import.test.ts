@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/app/lib/prisma.js";
+import { readWorkbook } from "../src/app/module/import/sheetReader.js";
 import { startTestApp, type Session, type TestApp } from "./helpers/app.js";
 
 /**
@@ -842,5 +843,58 @@ describe("a run whose server went away", () => {
 
     const run = await t.api.ok("GET", `/imports/${started.body.data.importId}`, undefined, agency);
     expect(run.status).toBe("RUNNING");
+  });
+});
+
+/**
+ * How the workbook is read, which is what decides whether an import of
+ * somebody's books can be trusted.
+ */
+describe("reading a workbook", () => {
+  it("keeps only the sheets it is asked for", async () => {
+    const file = await buildWorkbook();
+
+    const some = await readWorkbook(file, (name) => name === "Expense");
+
+    // Every sheet still comes back — the screen lists the ones it left alone —
+    // but only the asked-for one carries its rows, and the rows are the cost.
+    // Half of one of these files is the spreadsheet's own dashboards.
+    expect(some.length).toBeGreaterThan(1);
+    expect(some.filter((sheet) => sheet.rows.length > 0).map((sheet) => sheet.name)).toEqual([
+      "Expense",
+    ]);
+  });
+
+  it("reads every cell of a tab it keeps", async () => {
+    const file = await buildWorkbook();
+
+    const sheets = await readWorkbook(file);
+    const sales = sheets.find((sheet) => sheet.name === "Purchase and Sales");
+
+    // The text is the half that matters and the half that goes missing when a
+    // reader gets ahead of the table those cells point into: a streaming read
+    // was tried here and returned rows with every string null about three
+    // times in a hundred, numbers intact. Names, PNRs and account names are
+    // how every row in this import finds what it belongs to.
+    const header = sales!.rows.find((row) => row.cells.includes("PNR *"));
+    expect(header).toBeDefined();
+
+    const first = sales!.rows.find((row) => row.cells.includes("5TFPET"));
+    expect(first!.cells).toContain("Arman Sultana");
+    expect(first!.cells).toContain("Bank Asia");
+    expect(first!.cells).toContain(28_872);
+  });
+
+  it("treats a blank cell as nothing, whatever the file put there", async () => {
+    const file = await buildWorkbook();
+
+    const sheets = await readWorkbook(file);
+    const sales = sheets.find((sheet) => sheet.name === "Purchase and Sales");
+    const header = sales!.rows.find((row) => row.cells.includes("PNR *"));
+
+    // The spacer columns between a currency symbol and its number are empty.
+    // An empty string and a null are the same absence, and only one of them
+    // should ever reach the rest of the import.
+    expect(header!.cells).not.toContain("");
   });
 });

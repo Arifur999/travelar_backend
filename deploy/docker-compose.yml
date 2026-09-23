@@ -133,12 +133,10 @@ services:
     restart: unless-stopped
     environment:
       <<: *api-env
-      # Node sizes its heap from the host's memory, not from the limit below,
-      # so without this it grows happily past what the container is allowed
-      # and the kernel kills it. An agency importing its old spreadsheet is
-      # what finds this: reading the workbook is the one thing here that
-      # allocates hundreds of megabytes at once. Kept under the limit so V8
-      # collects hard first — being slow beats being killed mid-import.
+      # Node sizes its heap from the host's memory, not from the container's
+      # limit, so without this it grows past what it is allowed and the
+      # kernel kills it rather than V8 collecting first. Kept under the
+      # limit: being slow beats being killed halfway through an import.
       NODE_OPTIONS: "--max-old-space-size=1024"
     expose:
       - "5050"
@@ -150,10 +148,13 @@ services:
         condition: service_completed_successfully
     deploy:
       resources:
-        # Reading an agency's whole workbook is held in memory while it is
-        # parsed. 512M was not enough for a real one and the import was
-        # killed a step in; this is a ceiling, not a reservation, so nothing
-        # is taken from the other sites on this host until it is needed.
+        # Reading an agency's spreadsheet is the one thing here that
+        # allocates in hundreds of megabytes: a client's real workbook peaks
+        # at 661M through the whole import, measured in a container with the
+        # limit actually enforced. At the old 512M the kernel killed it part
+        # of the way through, which is what a progress bar stuck at 8% was.
+        # A ceiling, not a reservation — nothing is taken from the other
+        # sites on this host until an import is actually running.
         limits: { memory: 1536M, cpus: "1.0" }
     logging: *logging
 

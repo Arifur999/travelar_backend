@@ -44,11 +44,23 @@ const MAX_SERIAL = 60_000;
 
 const normalise = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
 
+/** An empty cell is nothing, however the reader spelt it. */
+const orNull = (value: CellValue): CellValue =>
+  typeof value === "string" && value.trim() === "" ? null : value;
+
+/**
+ * One cell's value, the same whichever reader found it.
+ *
+ * The two disagree about blanks — loading a workbook whole gives "" where
+ * streaming gives null — and while everything downstream reads both as
+ * nothing, two shapes for the same absence is the kind of difference that
+ * eventually gets compared.
+ */
 const cellValue = (cell: ExcelJS.Cell): CellValue => {
   const value = cell.value;
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value;
-  if (typeof value === "number" || typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "string") return orNull(value);
 
   // A formula cell carries its last computed result; a broken one carries an
   // error, which is not data.
@@ -57,30 +69,20 @@ const cellValue = (cell: ExcelJS.Cell): CellValue => {
     if ("result" in value) {
       const result = (value as ExcelJS.CellFormulaValue).result;
       if (result instanceof Date) return result;
-      if (typeof result === "number" || typeof result === "string") return result;
+      if (typeof result === "number" || typeof result === "string") return orNull(result);
       return null;
     }
     if ("richText" in value) {
-      return (value as ExcelJS.CellRichTextValue).richText.map((part) => part.text).join("");
+      return orNull((value as ExcelJS.CellRichTextValue).richText.map((part) => part.text).join(""));
     }
-    if ("text" in value) return String((value as ExcelJS.CellHyperlinkValue).text ?? "");
+    if ("text" in value) return orNull(String((value as ExcelJS.CellHyperlinkValue).text ?? ""));
   }
 
   return null;
 };
 
-/**
- * Every sheet in the workbook, with the rows of the ones worth keeping.
- *
- * `shouldRead` is about memory, not tidiness. One of these files is fifteen
- * sheets and half of them are the spreadsheet's own dashboards — five thousand
- * rows of formulas this app recomputes for itself and never reads. Copying
- * those out cost more than the whole import, and on a container with half a
- * gigabyte it is the difference between finishing and being killed part of the
- * way through. A sheet that is not read still comes back, by name and with no
- * rows, because the screen lists what it left alone.
- */
-export const readWorkbook = async (
+/** The whole workbook in memory. Costs twice as much; always knows the names. */
+const loadWorkbook = async (
   file: Buffer,
   shouldRead?: (name: string) => boolean,
 ): Promise<SheetData[]> => {
@@ -104,6 +106,29 @@ export const readWorkbook = async (
     return { name, headerRow: null, headers: [], rows };
   });
 };
+
+/**
+ * Every sheet in the workbook, with the rows of the ones worth keeping.
+ *
+ * The whole file is held in memory while it is parsed, which for a client's
+ * three-megabyte workbook costs around 275 MB. That is most of what the API
+ * container is allowed, so `shouldRead` matters: one of these files is fifteen
+ * sheets and half of them are the spreadsheet's own dashboards — thousands of
+ * rows of formulas this app works out for itself and never reads. A sheet that
+ * is not kept still comes back, by name and with no rows, because the screen
+ * lists what it left alone.
+ *
+ * Reading it as a stream instead would cost half as much, and was tried.
+ * exceljs's streaming reader drops text: roughly three reads in a hundred come
+ * back with every string cell null — PNRs, customer names, account names gone,
+ * numbers intact — because it starts on a worksheet before the table of shared
+ * strings those cells point into is ready. Intermittent and silent is the
+ * worst thing an import of somebody's books can be, so it is read whole.
+ */
+export const readWorkbook = async (
+  file: Buffer,
+  shouldRead?: (name: string) => boolean,
+): Promise<SheetData[]> => loadWorkbook(file, shouldRead);
 
 /**
  * The header is the row that matches the most of the columns we are looking
