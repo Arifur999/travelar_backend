@@ -51,8 +51,27 @@ info "neighbours: $BEFORE"
 case " $BEFORE" in *"=000"*) die "a neighbour is not answering already — fix that before touching the proxy" ;; esac
 
 step "2. Claiming port 80 for the ACME challenge"
-if cert_exists; then
-  ok "certificate already exists — skipping to the HTTPS block"
+# A certificate that exists but covers a different name is worse than none:
+# nginx loads it without complaint and every browser then refuses the site. It
+# has to be replaced, not skipped over.
+NEED_CERT=0
+FORCE=""
+if ! cert_exists; then
+  NEED_CERT=1
+elif ! cert_covers_domain; then
+  NEED_CERT=1
+  FORCE="--force-renewal"
+  info "$CERT exists but does not cover $DOMAIN — reissuing"
+fi
+
+if [ "$NEED_CERT" = 0 ]; then
+  ok "certificate already exists and covers $DOMAIN — skipping to the HTTPS block"
+elif [ -n "$FORCE" ] && mounted; then
+  # Our vhost is already installed and its port-80 half already serves
+  # /.well-known. Swapping the ACME-only block in here would take this site's
+  # HTTPS down for the length of the certbot run — and leave it down if
+  # certbot failed — to gain nothing.
+  ok "the installed vhost already answers the challenge on port 80"
 else
   render "$SRC/nginx/acme.conf.template"
   ok "wrote $OUR_CONF (port 80 only)"
@@ -62,15 +81,23 @@ else
   else
     ensure_mount
   fi
+fi
 
+if [ "$NEED_CERT" = 1 ]; then
   step "3. Certificate"
+  # shellcheck disable=SC2086 # FORCE is one optional flag or empty, not a list
   ( cd "$HATIM_STACK" && docker compose run --rm certbot certonly \
       --webroot -w /var/www/certbot \
       -d "$DOMAIN" \
-      --cert-name "$DOMAIN" \
+      --cert-name "$DOMAIN" $FORCE \
       --email "$EMAIL" --agree-tos --no-eff-email --non-interactive ) \
     || die "certbot failed. The port-80 block stays (it is harmless). Check that http://$DOMAIN/.well-known/acme-challenge/ reaches this server, then re-run."
   cert_exists || die "certbot finished but $CERT is not visible inside $NGINX_CTR"
+  cert_covers_domain || die "certbot finished but $CERT still does not cover $DOMAIN.
+       Look at what the lineage holds:
+         docker exec $NGINX_CTR openssl x509 -noout -subject -ext subjectAltName -in $CERT
+       If it is a neighbour's, remove only Travelar's lineage and run this again:
+         cd $HATIM_STACK && docker compose run --rm certbot delete --cert-name $DOMAIN"
   ok "certificate issued"
 fi
 

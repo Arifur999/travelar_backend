@@ -129,8 +129,26 @@ for d in softech.agency furnify.softech.agency; do
 done
 ```
 
-Seeing a neighbour's certificate in the second check means nginx is not using
-our block. Run `bash ensure-site.sh`.
+Seeing a neighbour's certificate in the second check — the browser calls it
+`ERR_CERT_COMMON_NAME_INVALID` — has two causes, and the first command tells
+them apart:
+
+```bash
+docker exec hatim_backend-nginx-1 openssl x509 -noout -subject -ext subjectAltName -in /etc/letsencrypt/live/travance.softech.agency/fullchain.pem
+```
+
+- **No such file** — our block is not loaded at all, and furnify's default
+  server is answering. Run `bash ensure-site.sh`.
+- **It prints a neighbour's name**, or the command errors — the lineage holds
+  the wrong certificate, so nginx loads our block and serves the wrong name
+  from it. Run `bash attach-site.sh`: it now notices this and reissues instead
+  of reporting that a certificate already exists. If certbot still hands back
+  the same one, delete only Travelar's lineage and run it again:
+
+```bash
+cd /srv/hatim/hatim_Backend && docker compose run --rm certbot delete --cert-name travance.softech.agency
+bash /root/travelar-src/deploy/attach-site.sh
+```
 
 ## Making it permanent on the furnify side
 

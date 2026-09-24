@@ -100,6 +100,30 @@ render() {
 cert_exists() { docker exec "$NGINX_CTR" test -f "$CERT" 2>/dev/null; }
 mounted()     { docker exec "$NGINX_CTR" test -f "$TARGET" 2>/dev/null; }
 
+# True when the certificate at CERT actually covers DOMAIN.
+#
+# File presence is not enough, and assuming it was cost travance.softech.agency
+# its HTTPS: a lineage can exist holding a NEIGHBOUR's certificate — a live/
+# symlink left pointing into another domain's archive, or a --cert-name reused
+# on a different -d. nginx then loads the HTTPS block without complaint, SNI
+# matches our server_name, and the proxy serves the wrong name's certificate
+# all day. Every browser calls that ERR_CERT_COMMON_NAME_INVALID, while
+# attach-site.sh said "certificate already exists" and skipped reissuing it.
+#
+# Reads the SAN list, not the subject: Let's Encrypt puts every name there and
+# modern clients ignore the CN entirely.
+cert_covers_domain() {
+  local text
+  text=$(docker exec "$NGINX_CTR" openssl x509 -noout -text -in "$CERT" 2>/dev/null) || {
+    # No openssl in the proxy image. Say so rather than reissue on every run:
+    # a forced renewal costs one of Let's Encrypt's 5 duplicates per week.
+    info "cannot read $CERT inside $NGINX_CTR (no openssl) — assuming it is right"
+    return 0
+  }
+  case "$text" in *"DNS:$DOMAIN"*) return 0 ;; esac
+  return 1
+}
+
 http_code() {
   curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$1" 2>/dev/null || true
 }

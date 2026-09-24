@@ -27,6 +27,14 @@ if ! cert_exists; then
   exit 0
 fi
 
+# Reissuing is attach-site.sh's job, not a two-minute timer's: certbot allows
+# only 5 duplicate certificates per domain per week, and a loop here would
+# spend them all before anyone read the log.
+if ! cert_covers_domain; then
+  loud "$CERT does not cover $DOMAIN — every browser will refuse this site. Run: bash attach-site.sh"
+  exit 0
+fi
+
 # Fast path: attached, and the proxy presents our certificate for our name.
 if mounted && docker exec "$NGINX_CTR" grep -q 'travelar-web' "$TARGET" 2>/dev/null; then
   case "$(served_subject "$DOMAIN")" in
