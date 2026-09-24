@@ -183,6 +183,12 @@ docker logs -f travelar-web
 docker logs -f travelar-api
 docker logs travelar-api | jq 'select(.requestId == "<id>")'
 
+# change what signs into the operator account (asks, nothing on a command line)
+bash /root/travelar-src/deploy/set-operator.sh
+# SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD in .env only seed it on the very
+# first boot; editing them later does nothing. This changes the live account.
+# Its script ships inside the API image, so pull a release that has it first.
+
 # change settings: asks for each value (passwords hidden), saves, applies
 bash /root/travelar-src/deploy/set-env.sh --smtp
 bash /root/travelar-src/deploy/set-env.sh SSLCOMMERZ_IS_LIVE

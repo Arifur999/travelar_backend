@@ -18,6 +18,8 @@ LIB_DIR=/usr/local/lib/travelar
 
 PROXY_NET=hatim_backend_default
 NGINX_CTR=hatim_backend-nginx-1
+# Our own containers, named in deploy/docker-compose.yml.
+API_CTR=travelar-api
 HATIM_STACK=/srv/hatim/hatim_Backend
 HATIM_COMPOSE="$HATIM_STACK/docker-compose.yml"
 # The mount every extra vhost line is inserted directly under.
