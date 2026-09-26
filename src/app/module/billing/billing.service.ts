@@ -1,8 +1,6 @@
 import status from "http-status";
-import { addDays } from "date-fns";
 import { Prisma } from "../../../generated/prisma/client.js";
 import {
-  AgencyStatus,
   PlanHistoryAction,
   SubscriptionOrderStatus,
 } from "../../../generated/prisma/enums.js";
@@ -16,49 +14,11 @@ import {
   createPaymentSession,
   validateOrder,
 } from "../../utils/sslcommerz.js";
+// Lives on its own because the bKash reviewer renews through it too, and a
+// second renewal path is exactly what this comment used to warn about.
+import { renewSubscription } from "./renewSubscription.js";
 
 const toNumber = PostingService.toNumber;
-
-/**
- * Extends a subscription from the later of now or its current end date, so
- * paying early never costs the agency the days it has already bought — and
- * sets the plan being paid for.
- *
- * This is the only renewal path. The old implementation had two that disagreed:
- * this one stacked, while the admin's assign-plan reset the end date to
- * now + duration and silently discarded whatever time was left.
- */
-const renewSubscription = async (
-  client: Prisma.TransactionClient,
-  agencyId: string,
-  planId: string,
-  durationDays: number,
-  actorId: string | null,
-  action: PlanHistoryAction,
-) => {
-  const agency = await client.agency.findUniqueOrThrow({ where: { id: agencyId } });
-
-  const base =
-    agency.subscriptionEndsAt && agency.subscriptionEndsAt.getTime() > Date.now()
-      ? agency.subscriptionEndsAt
-      : new Date();
-
-  await client.agency.update({
-    where: { id: agencyId },
-    data: {
-      // Paying for a plan puts the agency on that plan. The old code renewed
-      // the dates but left planId untouched, so an agency that paid to upgrade
-      // got more time on its old plan's features.
-      planId,
-      subscriptionEndsAt: addDays(base, durationDays),
-      status: AgencyStatus.ACTIVE,
-    },
-  });
-
-  await client.planHistory.create({
-    data: { agencyId, planId, action, assignedById: actorId },
-  });
-};
 
 const listAvailablePlans = async (agencyId: string) => {
   const [plans, agency] = await Promise.all([

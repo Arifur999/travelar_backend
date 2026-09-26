@@ -86,6 +86,17 @@ enum SubscriptionOrderStatus {
   CANCELLED
 }
 
+/// How an agency paid for a subscription, which decides what confirms it.
+///
+/// A gateway order is confirmed by SSLCommerz calling us back and by us
+/// validating that callback. A bKash one is confirmed by a person reading the
+/// receipt — so it sits PENDING until an operator says otherwise, and no
+/// amount of what the agency typed can move it on its own.
+enum PaymentChannel {
+  GATEWAY
+  BKASH_MANUAL
+}
+
 enum HajjTier {
   ECONOMY
   PREMIUM

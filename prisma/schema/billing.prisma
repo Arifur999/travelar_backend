@@ -22,6 +22,22 @@ model SubscriptionOrder {
 
   status               SubscriptionOrderStatus @default(PENDING)
   paymentMethod        String?
+
+  /// Gateway or bKash. A bKash order carries the three fields below and is
+  /// reviewed by hand; a gateway order carries none of them.
+  channel              PaymentChannel          @default(GATEWAY)
+
+  /// The number the agency says they paid from, and the transaction id from
+  /// their bKash message. Unique: a receipt can only be spent once, and
+  /// pasting somebody else's is the obvious way to try.
+  senderNumber         String?
+  senderReference      String?                 @unique
+
+  /// Who accepted or refused it, when, and why. An operator approving a
+  /// payment is granting a paid plan, so it is not done anonymously.
+  reviewedById         String?
+  reviewedAt           DateTime?
+  reviewNote           String?                 @db.Text
   /// Full IPN payload + validation response, kept for dispute/debugging.
   rawGatewayResponse   Json?
 
@@ -31,6 +47,8 @@ model SubscriptionOrder {
   @@index([agencyId])
   @@index([planId])
   @@index([status])
+  /// The operator's queue: everything waiting to be read, oldest first.
+  @@index([channel, status, createdAt])
   @@map("subscription_orders")
 }
 

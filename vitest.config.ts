@@ -38,6 +38,8 @@ export default defineConfig({
       SUPER_ADMIN_NAME: "Test Operator",
       SUPER_ADMIN_EMAIL: "operator@travelar.test",
       SUPER_ADMIN_PASSWORD: "Operator@12345",
+      // bKash is offered only when a number is set; these exercise that it is.
+      BKASH_MERCHANT_NUMBER: "01711111111",
       SSLCOMMERZ_STORE_ID: "",
       SSLCOMMERZ_STORE_PASSWORD: "",
       SENTRY_DSN: "",

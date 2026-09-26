@@ -3,6 +3,8 @@ import { Role } from "../../../generated/prisma/enums.js";
 import { checkAuth } from "../../middleware/checkAuth.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
 import { AdminController } from "./admin.controller.js";
+import { BillingController } from "../billing/billing.controller.js";
+import { BillingValidation } from "../billing/billing.validation.js";
 import { AdminValidation } from "./admin.validation.js";
 
 const router = Router();
@@ -21,6 +23,15 @@ router.get("/plans", AdminController.listPlans);
 router.post("/plans", validateRequest(AdminValidation.createPlanZodSchema), AdminController.createPlan);
 router.patch("/plans/:id", validateRequest(AdminValidation.updatePlanZodSchema), AdminController.updatePlan);
 router.delete("/plans/:id", AdminController.deactivatePlan);
+
+// bKash payments an agency says it has made. Approving one renews the plan,
+// so it is the operator who does it and nobody else.
+router.get("/manual-payments", BillingController.listManualPaymentsForReview);
+router.post(
+  "/manual-payments/:id/review",
+  validateRequest(BillingValidation.reviewManualPaymentZodSchema),
+  BillingController.reviewManualPayment,
+);
 
 router.get("/agencies", AdminController.listAgencies);
 router.get("/agencies/:id", AdminController.getAgencyById);

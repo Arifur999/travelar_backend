@@ -93,6 +93,13 @@ const envSchema = z.object({
   // Defaults: info in production, debug in development, error in tests.
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error", "silent"]).optional(),
 
+  /// The operator bKash account an agency pays a subscription into.
+  ///
+  /// Empty means bKash is not offered: the screen says so rather than asking
+  /// somebody to send money to nowhere. Here rather than in the database
+  /// because it is the platform owner's own account, not a tenant setting.
+  BKASH_MERCHANT_NUMBER: z.string().default(""),
+
   CRON_SECRET: z.string().default(""),
   // In-process hourly jobs. Leave on for a single instance; set "false" where an
   // external scheduler calls /api/v1/internal/jobs/* instead, or on extra
