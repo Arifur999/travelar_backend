@@ -3,6 +3,50 @@ import { z } from "zod";
 
 dotenv.config();
 
+/**
+ * Operator passwords that are written down somewhere public.
+ *
+ * SUPER_ADMIN is the platform account: it belongs to no agency and manages all
+ * of them, so it is the one login on this system that can reach every tenant's
+ * books. A value that has been committed to a repository, printed in a readme
+ * or copied from an example file is not a password for that account, whoever
+ * else is using it.
+ */
+const PUBLISHED_OPERATOR_PASSWORDS = new Set([
+  // Shipped in .env.example until it was replaced with a placeholder.
+  "Admin@12345",
+  // vitest.config.ts, for a database nobody can reach.
+  "Operator@12345",
+  "change-me-before-first-boot",
+]);
+
+/** Long enough that guessing it is not the way in. */
+const MIN_OPERATOR_PASSWORD = 16;
+
+/**
+ * Why this operator password cannot be used here, or null when it can.
+ *
+ * Only enforced in production. A short password on a developer's laptop
+ * protects a database on localhost and refusing it would be theatre; the same
+ * password on the live platform is every agency's books.
+ */
+export const operatorPasswordProblem = (
+  password: string,
+  nodeEnv: string,
+): string | null => {
+  if (nodeEnv !== "production") return null;
+
+  if (PUBLISHED_OPERATOR_PASSWORDS.has(password)) {
+    return "SUPER_ADMIN_PASSWORD is one of the example values that ship with this repository. It manages every agency on the platform, so it has to be a password nobody else has seen.";
+  }
+
+  if (password.length < MIN_OPERATOR_PASSWORD) {
+    return `SUPER_ADMIN_PASSWORD must be at least ${MIN_OPERATOR_PASSWORD} characters in production. It is the one account that can reach every agency's books. Generate one with: openssl rand -hex 16`;
+  }
+
+  return null;
+};
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(5000),
@@ -42,6 +86,8 @@ const envSchema = z.object({
 
   SUPER_ADMIN_NAME: z.string().default("Super Admin"),
   SUPER_ADMIN_EMAIL: z.email("SUPER_ADMIN_EMAIL must be a valid email"),
+  // The production rules are below, in the superRefine: they need NODE_ENV,
+  // which is a sibling field rather than something this one can see.
   SUPER_ADMIN_PASSWORD: z.string().min(8, "SUPER_ADMIN_PASSWORD must be at least 8 characters"),
 
   // Defaults: info in production, debug in development, error in tests.
@@ -58,7 +104,14 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().default(""),
 });
 
-const parsed = envSchema.safeParse(process.env);
+const envSchemaWithOperatorRules = envSchema.superRefine((value, ctx) => {
+  const problem = operatorPasswordProblem(value.SUPER_ADMIN_PASSWORD, value.NODE_ENV);
+  if (problem) {
+    ctx.addIssue({ code: "custom", path: ["SUPER_ADMIN_PASSWORD"], message: problem });
+  }
+});
+
+const parsed = envSchemaWithOperatorRules.safeParse(process.env);
 
 // Fail loudly at boot, listing every problem at once. A server that starts with
 // a bad secret fails much later, inside a request, with a confusing message.
