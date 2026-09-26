@@ -1,0 +1,30 @@
+/// Settings that belong to the platform rather than to any agency.
+///
+/// One row, always. A settings table with a row per key is flexible and
+/// unreadable; a settings table with one row and real columns can be read at a
+/// glance and typed by Prisma, and there are only ever a handful of these.
+model PlatformSetting {
+  /// Fixed, so there can only be one row: every write upserts this id.
+  id             String    @id @default("singleton")
+
+  /// The bKash account an agency sends a subscription payment to. Empty means
+  /// bKash is not offered yet, and the payment screen says so rather than
+  /// inviting money into the void.
+  bkashNumber    String?
+
+  /// The QR, stored here rather than on a CDN.
+  ///
+  /// Cloudinary is optional on this platform — bootstrap leaves its keys blank
+  /// — and a payment QR that only appears when an unrelated service happens to
+  /// be configured is a payment QR that will be missing on somebody's first
+  /// day. It is served back by the API from these two columns.
+  bkashQrData    Bytes?
+  bkashQrType    String?
+  bkashQrSetAt   DateTime?
+
+  updatedById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("platform_settings")
+}

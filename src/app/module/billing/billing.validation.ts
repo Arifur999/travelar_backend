@@ -32,7 +32,13 @@ const reviewManualPaymentZodSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
+/** The operator's bKash number. Empty is allowed: it turns bKash off. */
+const paymentSettingsZodSchema = z.object({
+  bkashNumber: z.string().trim().max(20, "That is longer than a bKash number"),
+});
+
 export const BillingValidation = {
+  paymentSettingsZodSchema,
   checkoutZodSchema,
   manualPaymentZodSchema,
   reviewManualPaymentZodSchema,

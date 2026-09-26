@@ -27,12 +27,39 @@ beforeAll(async () => {
     operator,
   );
   planId = plan.id;
+
+  // bKash is only offered once the operator has set both the number and the
+  // QR, so every test below needs them in place first.
+  await t.api.ok("PATCH", "/admin/payment-settings", { bkashNumber: "01711111111" }, operator);
+  await uploadQr();
 });
 
 afterAll(() => t.close());
 
 let receiptSeq = 0;
 const receipt = () => `BKX${(receiptSeq += 1)}${Date.now().toString().slice(-6)}`;
+
+/** A one-pixel PNG is a valid image and is the smallest thing to upload. */
+const PNG_1X1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+const uploadQr = async () => {
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(PNG_1X1)], { type: "image/png" }), "qr.png");
+
+  const response = await fetch(`${t.api.baseUrl}/api/v1/admin/payment-settings/qr`, {
+    method: "POST",
+    headers: {
+      Cookie: `accessToken=${operator.accessToken}; better-auth.session_token=${operator.token}`,
+      "X-Forwarded-For": "10.9.9.9",
+    },
+    body: form,
+  });
+
+  return { status: response.status, body: await response.json() };
+};
 
 const submit = (agency: Session, senderReference: string) =>
   t.api.post(
@@ -48,7 +75,7 @@ describe("an agency saying it has paid by bKash", () => {
     const info = await t.api.ok("GET", "/billing/manual-payment", undefined, agency);
 
     expect(info.available).toBe(true);
-    expect(info.number).toBe(process.env.BKASH_MERCHANT_NUMBER);
+    expect(info.number).toBe("01711111111");
   });
 
   it("records the claim and turns nothing on", async () => {
@@ -199,5 +226,63 @@ describe("who is allowed to approve", () => {
     );
 
     expect(attempt.status).toBe(401);
+  });
+});
+
+/**
+ * The number and QR an agency is asked to pay into.
+ *
+ * These belong to whoever runs the platform, not to whoever deploys it: they
+ * used to be an environment variable and a file committed into the web app,
+ * so changing the account subscriptions are paid into meant a deploy.
+ */
+describe("the payment details the operator sets", () => {
+  it("serves the QR as an image, not as JSON", async () => {
+    const agency = await t.api.registerAgency("Scanner");
+
+    const response = await fetch(`${t.api.baseUrl}/api/v1/billing/manual-payment/qr`, {
+      headers: {
+        Cookie: `accessToken=${agency.accessToken}; better-auth.session_token=${agency.token}`,
+        "X-Forwarded-For": "10.9.9.9",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    // The bytes come back, not a base64 string wrapped in an envelope.
+    expect((await response.arrayBuffer()).byteLength).toBe(PNG_1X1.byteLength);
+  });
+
+  it("cannot be changed by an agency", async () => {
+    const agency = await t.api.registerAgency("Not the operator");
+
+    const attempt = await t.api.patch(
+      "/admin/payment-settings",
+      { bkashNumber: "01999999999" },
+      agency,
+    );
+
+    // A tenant setting the account its own subscription is paid into would be
+    // the whole billing system, undone.
+    expect(attempt.status).toBe(403);
+
+    const info = await t.api.ok("GET", "/billing/manual-payment", undefined, agency);
+    expect(info.number).toBe("01711111111");
+  });
+
+  it("refuses something that is not an image", async () => {
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array([1, 2, 3])], { type: "text/plain" }), "qr.txt");
+
+    const response = await fetch(`${t.api.baseUrl}/api/v1/admin/payment-settings/qr`, {
+      method: "POST",
+      headers: {
+        Cookie: `accessToken=${operator.accessToken}; better-auth.session_token=${operator.token}`,
+        "X-Forwarded-For": "10.9.9.9",
+      },
+      body: form,
+    });
+
+    expect(response.status).toBe(400);
   });
 });

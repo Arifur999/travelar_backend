@@ -38,6 +38,7 @@ router.post("/orders/:transactionId/retry", checkAuth(Role.AGENCY_ADMIN), Billin
 // Paying by bKash: the agency sends a receipt, an operator reads it. Staff may
 // see where to pay and what is outstanding; only an admin can claim a payment.
 router.get("/manual-payment", BillingController.getManualPaymentInfo);
+router.get("/manual-payment/qr", BillingController.getManualPaymentQr);
 router.get("/manual-payment/pending", BillingController.getMyPendingManualPayment);
 router.post(
   "/manual-payment",

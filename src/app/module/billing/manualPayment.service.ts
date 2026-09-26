@@ -5,10 +5,10 @@ import {
   PlanHistoryAction,
   SubscriptionOrderStatus,
 } from "../../../generated/prisma/enums.js";
-import { env } from "../../../config/env.js";
 import AppError from "../../errorHelpers/AppError.js";
 import { prisma } from "../../lib/prisma.js";
 import { IRequestUser } from "../../interfaces/requestUser.interface.js";
+import { PaymentSettingsService } from "./paymentSettings.service.js";
 import { renewSubscription } from "./renewSubscription.js";
 
 /**
@@ -45,20 +45,11 @@ export interface IManualPaymentPayload {
 /**
  * Where to send the money, for the screen that asks for it.
  *
- * The number lives in the environment rather than in the code: it is the
- * operator's own bKash account, it changes without a release, and it is not
- * something a tenant should be able to edit.
+ * Read from the operator's own settings rather than from the environment: it
+ * is their bKash account, it changes without a release, and a tenant must not
+ * be able to edit it.
  */
-const getPaymentInstructions = () => {
-  const number = env.BKASH_MERCHANT_NUMBER.trim();
-
-  return {
-    number,
-    /** False when nobody has set a number yet — the screen says so instead of
-     * inviting a payment into the void. */
-    available: number.length > 0,
-  };
-};
+const getPaymentInstructions = () => PaymentSettingsService.getForPayer();
 
 const buildTransactionId = (agencyId: string) =>
   `BKASH-${agencyId.slice(0, 8)}-${Date.now()}`;
@@ -70,11 +61,11 @@ const buildTransactionId = (agencyId: string) =>
  * a row saying "they say they sent this" — everything else waits for a person.
  */
 const submit = async (agencyId: string, payload: IManualPaymentPayload) => {
-  const instructions = getPaymentInstructions();
+  const instructions = await getPaymentInstructions();
   if (!instructions.available) {
     throw new AppError(
       status.SERVICE_UNAVAILABLE,
-      "Paying by bKash is not set up on this server yet. Ask your administrator to add the bKash number.",
+      "Paying by bKash is not set up yet. Ask whoever runs the platform to add the bKash number and QR.",
     );
   }
 

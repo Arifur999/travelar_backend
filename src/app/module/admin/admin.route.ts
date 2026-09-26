@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import { Role } from "../../../generated/prisma/enums.js";
 import { checkAuth } from "../../middleware/checkAuth.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
@@ -6,6 +7,11 @@ import { AdminController } from "./admin.controller.js";
 import { BillingController } from "../billing/billing.controller.js";
 import { BillingValidation } from "../billing/billing.validation.js";
 import { AdminValidation } from "./admin.validation.js";
+
+const qrUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
 
 const router = Router();
 
@@ -23,6 +29,21 @@ router.get("/plans", AdminController.listPlans);
 router.post("/plans", validateRequest(AdminValidation.createPlanZodSchema), AdminController.createPlan);
 router.patch("/plans/:id", validateRequest(AdminValidation.updatePlanZodSchema), AdminController.updatePlan);
 router.delete("/plans/:id", AdminController.deactivatePlan);
+
+// Where subscription money is sent: the operator's own bKash number and the
+// QR agencies scan. In the database rather than in a file on the server, so
+// changing it is a form rather than a deploy.
+router.get("/payment-settings", BillingController.getPaymentSettings);
+router.patch(
+  "/payment-settings",
+  validateRequest(BillingValidation.paymentSettingsZodSchema),
+  BillingController.updatePaymentSettings,
+);
+router.post(
+  "/payment-settings/qr",
+  qrUpload.single("file"),
+  BillingController.uploadPaymentQr,
+);
 
 // bKash payments an agency says it has made. Approving one renews the plan,
 // so it is the operator who does it and nobody else.

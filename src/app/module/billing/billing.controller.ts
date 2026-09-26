@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import status from "http-status";
 import { requireAgencyId } from "../../middleware/tenantGuards.js";
+import AppError from "../../errorHelpers/AppError.js";
 import catchAsync from "../../shared/catchAsync.js";
 import { sendResponse } from "../../shared/sendResponse.js";
 import { clientResultUrl } from "../../utils/sslcommerz.js";
 import { BillingService } from "./billing.service.js";
 import { ManualPaymentService } from "./manualPayment.service.js";
+import { PaymentSettingsService } from "./paymentSettings.service.js";
 
 const ok = (res: Response, message: string, data: unknown, httpStatus: number = status.OK) =>
   sendResponse(res, { httpStatus, success: true, message, data });
@@ -71,7 +73,55 @@ const getManualPaymentInfo = catchAsync(async (_req: Request, res: Response) => 
     httpStatus: status.OK,
     success: true,
     message: "Payment instructions fetched successfully",
-    data: ManualPaymentService.getPaymentInstructions(),
+    data: await ManualPaymentService.getPaymentInstructions(),
+  });
+});
+
+/**
+ * The QR itself.
+ *
+ * Sent as an image rather than embedded in the JSON above, so the browser
+ * caches it like any other picture and the instructions stay a small payload.
+ * Private: it is only useful to somebody who is paying, and only they are
+ * signed in to ask.
+ */
+const getManualPaymentQr = catchAsync(async (_req: Request, res: Response) => {
+  const qr = await PaymentSettingsService.getQr();
+
+  res.setHeader("Content-Type", qr.contentType);
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.send(qr.data);
+});
+
+/** The operator's view of the same settings, and the two ways to change them. */
+const getPaymentSettings = catchAsync(async (_req: Request, res: Response) => {
+  sendResponse(res, {
+    httpStatus: status.OK,
+    success: true,
+    message: "Payment settings fetched successfully",
+    data: await PaymentSettingsService.getForOperator(),
+  });
+});
+
+const updatePaymentSettings = catchAsync(async (req: Request, res: Response) => {
+  sendResponse(res, {
+    httpStatus: status.OK,
+    success: true,
+    message: "bKash number saved",
+    data: await PaymentSettingsService.setNumber(req.body.bkashNumber, req.user),
+  });
+});
+
+const uploadPaymentQr = catchAsync(async (req: Request, res: Response) => {
+  if (!req.file) {
+    throw new AppError(status.BAD_REQUEST, "Attach the QR image as `file`");
+  }
+
+  sendResponse(res, {
+    httpStatus: status.OK,
+    success: true,
+    message: "bKash QR saved",
+    data: await PaymentSettingsService.setQr(req.file, req.user),
   });
 });
 
@@ -142,6 +192,10 @@ export const BillingController = {
   handleFail: redirectResult("failed"),
   handleCancel: redirectResult("cancelled"),
   getManualPaymentInfo,
+  getManualPaymentQr,
+  getPaymentSettings,
+  updatePaymentSettings,
+  uploadPaymentQr,
   submitManualPayment,
   getMyPendingManualPayment,
   listManualPaymentsForReview,
